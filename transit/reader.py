@@ -15,6 +15,10 @@
 import json
 from collections import OrderedDict
 
+X_orderdict = 0     #no gain
+if X_orderdict:
+    OrderedDict = dict
+
 import msgpack
 from transit import sosjson
 from transit.decoder import Decoder

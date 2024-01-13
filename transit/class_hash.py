@@ -12,6 +12,7 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+X_simplify =10  #~ no gain?
 
 from collections.abc import MutableMapping
 
@@ -40,6 +41,25 @@ class ClassDict(MutableMapping):
                     return value
             raise KeyError(f"No handler found for: {key}")
 
+    if X_simplify:
+      def __getitem__(self, key):
+        if not isinstance(key, type): key = type(key)   #same as key.__class__
+        try:
+            return self.store[key]
+        except KeyError:
+            #~~never comes here ??
+            if 0:   #maybe wrong
+                for t,h in self.store.items():
+                    if issubclass( t, key):
+                        return h
+            for t in key.__bases__:
+                if t in self.store: return self.store[t]
+            # only use mro if __bases__ doesn't work to
+            # avoid its perf overhead.
+            for t in key.mro():
+                if t in self.store: return self.store[t]
+            raise KeyError(f"No handler found for: {key}")
+
     def __setitem__(self, key, value):
         self.store[key] = value
 
@@ -51,3 +71,4 @@ class ClassDict(MutableMapping):
 
     def __len__(self):
         return len(self.store)
+

@@ -12,6 +12,9 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+X_mapkeystr = 1
+X_tuple_via_list =1     #some gain
+
 from collections import OrderedDict
 
 from transit import transit_types
@@ -114,9 +117,16 @@ class Decoder(object):
         if node:
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
+                if 0*X_mapkeystr:
+                    # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
+                    self_decode = self._decode
+                    return transit_types.frozendict( {  #pff slower than below..
+                        self_decode(k, cache, 'mapkeystr') : self_decode(v, cache, as_map_key)
+                        for k,v in pairs(node[1:])
+                        })
                 returned_dict = {}
                 for k, v in pairs(node[1:]):
-                    key = self._decode(k, cache, True)
+                    key = self._decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
                     val = self._decode(v, cache, as_map_key)
                     returned_dict[key] = val
                 return transit_types.frozendict(returned_dict)
@@ -124,6 +134,8 @@ class Decoder(object):
             decoded = self._decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
                 return self.decode_tag(decoded.tag, self._decode(node[1], cache, as_map_key))
+        if X_tuple_via_list:
+            return tuple([self._decode(x, cache, as_map_key) for x in node])
         return tuple(self._decode(x, cache, as_map_key) for x in node)
 
     def decode_string(self, string, cache, as_map_key):
@@ -152,7 +164,7 @@ class Decoder(object):
                 # -- e.g., we have to specify encode/decode order for key/val
                 # -- explicitly, all implicit ordering has broken in corner
                 # -- cases, thus these extraneous seeming assignments
-                key = self._decode(k, cache, True)
+                key = self._decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
                 val = self._decode(v, cache, False)
                 h[key] = val
             return transit_types.frozendict(h)
@@ -167,6 +179,11 @@ class Decoder(object):
     def parse_string(self, string, cache, as_map_key):
         if string.startswith(ESC):
             m = string[1]
+
+            if X_mapkeystr:
+              if m==':' and as_map_key=='mapkeystr' and as_map_key in self.decoders:
+                return self.decoders[ as_map_key ].from_rep(string[2:])
+
             if m in self.decoders:
                 return self.decoders[m].from_rep(string[2:])
             elif m == ESC or m == SUB or m == RES:

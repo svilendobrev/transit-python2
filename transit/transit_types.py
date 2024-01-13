@@ -12,13 +12,25 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+X_frozendict =1
+#X_slots =0     #~no gain
+X_keysym =1     #if on, all X_* below are irrelevant
+X_noassert=1
+X_parse_initial=0   #NO, _parse is never called anyway
+X_prove_parse_unused =0
 
 from functools import reduce
 from collections.abc import Mapping, Hashable
 
 
 class Named(object):
+    if X_noassert:
+      def __init__(self, value):
+        self.str = value
+        self.hv = value.__hash__()
+
     def _parse(self):
+        if X_prove_parse_unused: assert 0
         p = self.str.split("/", 1)
         if len(p) == 1:
             self._name = self.str
@@ -38,7 +50,8 @@ class Named(object):
 
 
 class Keyword(Named):
-    def __init__(self, value):
+    if not X_noassert:
+     def __init__(self, value):
         assert isinstance(value, str)
         self.str = value
         self.hv = value.__hash__()
@@ -63,7 +76,8 @@ class Keyword(Named):
 
 
 class Symbol(Named):
-    def __init__(self, value):
+    if not X_noassert:
+     def __init__(self, value):
         assert isinstance(value, str)
         self.str = value
         self.hv = value.__hash__()
@@ -85,6 +99,20 @@ class Symbol(Named):
 
     def __str__(self):
         return self.str
+
+
+if X_keysym:
+    class Named( str):
+        __hash__ = str.__hash__
+        def __ne__(self, other): return not self == other
+        def __eq__(self, other):
+            return isinstance(other, self.__class__) and super().__eq__( other)
+        @property
+        def str( self): return str(self)
+        #XXX WTF is __call__ ?
+    class Symbol( Named): pass
+    class Keyword( Named):
+        def __repr__(self): return f"<Keyword {self}>"
 
 
 kw_cache = {}
@@ -182,6 +210,15 @@ class frozendict(Mapping, Hashable):
     def __repr__(self):
         return "frozendict(%r)" % (self._dict,)
 
+if X_frozendict:
+  from collections.abc import MutableMapping
+  class frozendict( dict):
+    def __hash__(self):
+        return hash(frozenset(self.items()))
+    def __repr__(self):
+        return 'frozendict('+super().__repr__()+')'
+    locals().update( (m,None) for m in dir(MutableMapping) if m not in dir(Mapping))
+
 
 class Link(object):
     # Class property constants for rendering types
@@ -252,7 +289,6 @@ class Boolean(object):
     as an int, they're not). You can get a Python bool using bool(x)
     where x is a true or false Boolean.
     """
-
     def __init__(self, name):
         self.v = True if name == "true" else False
         self.name = name
