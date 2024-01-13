@@ -100,6 +100,9 @@ def exemplar(name, val):
             else:
                 unittest.TestCase.assertEqual(self, val, data, name + " " + str(val) + " vs " + str(data))
 
+        def shortDescription(self):
+            return name
+
     globals()["test_" + name + "_json"] = ExemplarTest
 
 
