@@ -12,12 +12,10 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-X_encache =1
+X_rework =1
 X_encode_key_map =1
 X_is_cacheable =1
 X_is_cache_key =1
-
-X_decode_is_cache_key =1   #no gain?
 
 from transit.constants import SUB, MAP_AS_ARR
 
@@ -26,14 +24,15 @@ CACHE_CODE_DIGITS = 44
 CACHE_SIZE = CACHE_CODE_DIGITS * CACHE_CODE_DIGITS
 MIN_SIZE_CACHEABLE = 4
 
-
 def is_cache_key(name):
     return len(name) and (name[0] == SUB and name != MAP_AS_ARR)
+#ReadCache.cacheCode
 if X_is_cache_key:
   def is_cache_key(name):
     return name and (name[0] == SUB and name != MAP_AS_ARR)
 
 
+# WriteCache.indexToCode
 def encode_key(i):
     lo = i % CACHE_CODE_DIGITS
     hi = i // CACHE_CODE_DIGITS
@@ -41,7 +40,7 @@ def encode_key(i):
         return "^" + chr(lo + FIRST_ORD)
     return "^" + chr(hi + FIRST_ORD) + chr(lo + FIRST_ORD)
 
-
+# ReadCache.codeToIndex
 def decode_key(s):
     sz = len(s)
     if sz == 2:
@@ -49,19 +48,20 @@ def decode_key(s):
     return (ord(s[2]) - FIRST_ORD) + (CACHE_CODE_DIGITS * (ord(s[1]) - FIRST_ORD))
 
 if X_encode_key_map:
-    encode_key_map = dict(
+    if 0:
+        encode_i2key_map = dict(
                 (k*CACHE_CODE_DIGITS+l, "^" + ('' if not k else chr(k + FIRST_ORD)) + chr(l + FIRST_ORD))
                 for k in range( CACHE_CODE_DIGITS)
                 for l in range( CACHE_CODE_DIGITS)
                 )
-
+    encode_i2key_map = dict( (i,encode_key(i)) for i in range( CACHE_SIZE))
 
 def is_cacheable(string, as_map_key=False):
     return string and len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[:2] in ["~#", "~$", "~:"]))
+#WriteCache.isCacheable
 if X_is_cacheable:
   def is_cacheable(string, as_map_key=False):
     return len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:"))
-
 
 class RollingCache(object):
     """This is the internal cache used by python-transit for cacheing and
@@ -71,8 +71,6 @@ class RollingCache(object):
     be used directly.
     """
 
-    #XXX this below is partialy broken . see transit-java-code/impl/ReadCache.java + transit-java-code/impl/WriteCache.java
-
     def __init__(self):
         self.key_to_value = {}
         self.value_to_key = {}
@@ -81,12 +79,6 @@ class RollingCache(object):
     def decode(self, name, as_map_key=False):
         """Always returns the name"""
         if is_cache_key(name) and (name in self.key_to_value):
-            return self.key_to_value[name]
-        return self.encache(name) if is_cacheable(name, as_map_key) else name
-    if X_decode_is_cache_key:
-      def decode(self, name, as_map_key=False):
-        """Always returns the name"""
-        if name in self.key_to_value:   #XXX called only if is_cache_key() .. and seems 100% same as encode() ??? XXX
             return self.key_to_value[name]
         return self.encache(name) if is_cacheable(name, as_map_key) else name
 
@@ -102,6 +94,7 @@ class RollingCache(object):
     def is_cache_full(self):
         return len(self.key_to_value) > CACHE_SIZE
 
+    # cacheWrite
     def encache(self, name):
         if self.is_cache_full():
             self.clear()
@@ -117,19 +110,34 @@ class RollingCache(object):
     def clear(self):
         self.value_to_key = {}
 
-    if X_encache:
-      def encache(self, name):
-        key_to_value = self.key_to_value
-        l = len(key_to_value)
-        value_to_key= self.value_to_key
-        if l > CACHE_SIZE:  #is_cache_full
-            value_to_key.clear()
-        elif name in value_to_key:
-            return value_to_key[name]
+if X_rework:
+  #XXX this above is broken
+  ## see transit-java-code/impl/ReadCache.java + transit-java-code/impl/WriteCache.java
+  # use below + see Decoder.decoder_list
+
+  class RollingCache( dict):    #https://github.com/cognitect/transit-format
+    X_rework = X_rework
+    def encode(self, name, as_map_key=False):     #as of java:WriteCache.cacheWrite
+        #if not is_cacheable( name, as_map_key): return name
+        cache = self
+        if name in cache: return cache[name]
+        if is_cacheable( name, as_map_key):     #better here
+            self.encache( name, False)
+        return name
+    #decode is at Decoder.decode_string
+    def encache( self, name, key2name=False):    #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
+        cache = self
+        l = len( cache)
+        if l >= CACHE_SIZE:
+            cache.clear()
+            l = 0
         if X_encode_key_map:
-            key = encode_key_map[ l ]       #no much gain
+            key = encode_i2key_map[ l ]       #no much gain?
         else:
             key = encode_key( l)
-        key_to_value[key] = name
-        value_to_key[name] = key
-        return name
+        if key2name:
+            cache[ key ] = name
+        else:
+            cache[ name ] = key
+        return key,name
+

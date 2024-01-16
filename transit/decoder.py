@@ -12,6 +12,7 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+X_FIX_ARRAY = 1
 X_mapkeystr = 1
 X_tuple_via_list =1     #some gain
 
@@ -91,6 +92,7 @@ class Decoder(object):
         """
         if not cache:
             cache = RollingCache()
+        self.cache = cache
         return self._decode(node, cache, as_map_key)
 
     def _decode(self, node, cache, as_map_key):
@@ -117,7 +119,7 @@ class Decoder(object):
         if node:
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
-                if 0*X_mapkeystr:
+                if X_mapkeystr:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
                     self_decode = self._decode
                     return transit_types.frozendict( {  #pff slower than below..
@@ -134,8 +136,9 @@ class Decoder(object):
             decoded = self._decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
                 return self.decode_tag(decoded.tag, self._decode(node[1], cache, as_map_key))
-        if X_tuple_via_list:
-            return tuple([self._decode(x, cache, as_map_key) for x in node])
+            if X_FIX_ARRAY:
+                # XXX fallthrough???     hahah will repeate parseing node[0] ..broken cache
+                return (decoded, *[self._decode(x, cache, as_map_key) for x in node[1:]])
         return tuple(self._decode(x, cache, as_map_key) for x in node)
 
     def decode_string(self, string, cache, as_map_key):
@@ -147,6 +150,15 @@ class Decoder(object):
         if is_cacheable(string, as_map_key):
             cache.encode(string, as_map_key)
         return self.parse_string(string, cache, as_map_key)
+
+    if getattr( RollingCache, 'X_rework', 0):
+      def decode_string(self, string, cache, as_map_key):
+        if is_cache_key(string):
+            return cache[ string ]
+        pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
+        if is_cacheable(string, as_map_key):
+            cache.encache(pstring, True)
+        return pstring
 
     def decode_tag(self, tag, rep):
         decoder = self.decoders.get(tag, None)
