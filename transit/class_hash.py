@@ -12,7 +12,7 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-X_simplify =10  #~ no gain?
+X_simplify =1
 
 from collections.abc import MutableMapping
 
