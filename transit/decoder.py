@@ -92,7 +92,7 @@ class Decoder(object):
         """
         if not cache:
             cache = RollingCache()
-        self.cache = cache
+        #self.cache = cache
         return self._decode(node, cache, as_map_key)
 
     def _decode(self, node, cache, as_map_key):
