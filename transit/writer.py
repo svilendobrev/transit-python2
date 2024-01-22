@@ -12,19 +12,20 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-X_marshal_map =1
-X_marshal_arr =1
+X_marshal_map =2
+X_marshal_arr =2
 X_marshal_dispatch =1
 X_are_stringable_keys =1
 from transit.write_handlers import X_wHandler_tag_len_1, X_wHandler_tag_str
 X_io_write =1
-X_pop_push =1
+#X_pop_push =1
+X_started_is_key_at_once =1     #much better than above
 X_emit_object_str_tx =1
 X_emit_str_noobject =1
-X_started_is_key_at_once =1
 X_io_write_as_self_getitem =0    #slower
 X_escape=1
 X_marshal_str =1
+X_io_write_sep =1
 # no  self.marshal_dispatch = { s : self.emit_string, ... }
 #TODO self.handlers[x][tag]
 
@@ -184,11 +185,6 @@ class Marshaler(object):
         for x in a:
             self.marshal(x, False, cache)
         self.emit_array_end()
-    if X_marshal_arr:
-     def emit_array(self, a, _, cache):
-        self.emit_array_start(len(a))
-        self.marshal_arr(a, cache)
-        self.emit_array_end()
 
     def emit_map(self, m, _, cache):  # use map as object from above, have to overwrite default parser.
         self.emit_map_start(len(m))
@@ -254,7 +250,7 @@ class Marshaler(object):
         handler = self.handlers[obj]
         tag = handler.tag_str or handler.tag(obj)
 
-        if tag == "s":  #X_marshal_str and
+        if tag == "s":  #X_marshal_str and  :most frequent case
             return self.emit_string("", "", escape(
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 ), as_map_key, cache)
@@ -276,7 +272,7 @@ class Marshaler(object):
         handler = handlers[obj]
         tag = handler.tag_str or handler.tag(obj)
 
-        if tag == "s":  #X_marshal_str and
+        if tag == "s":  #X_marshal_str and  :most frequent case
             emit_string("", "", escape(
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 ), as_map_key, cache)
@@ -288,7 +284,8 @@ class Marshaler(object):
         else:
             emit_encoded(tag, handler, obj, as_map_key, cache)
     if X_marshal_arr:
-     def marshal_arr(self, objs, cache):
+     def emit_array(self, objs, _, cache):
+       self.emit_array_start(len(objs))
        handlers = self.handlers
        emit_encoded = self.emit_encoded
        emit_string = self.emit_string
@@ -298,7 +295,7 @@ class Marshaler(object):
         #tag = handler.tag(obj)
         tag = handler.tag_str or handler.tag(obj)
 
-        if tag == "s":  #X_marshal_str and
+        if tag == "s":  #X_marshal_str and  :most frequent case
             emit_string("", "", escape( handler.rep(obj)), as_map_key, cache)
             continue
         if tag in marshal_dispatch:
@@ -307,6 +304,7 @@ class Marshaler(object):
                 as_map_key, cache,)
         else:
             emit_encoded(tag, handler, obj, as_map_key, cache)
+       self.emit_array_end()
 
     def marshal_top(self, obj, cache=None):
         """Given a complete object that needs to be marshaled into Transit
@@ -436,7 +434,7 @@ class JsonMarshaler(Marshaler):
             self.levels = [ started_is_key( True, None)]
             self.levels_append = self.levels.append
             self.levels_pop = self.levels.pop
-            self.pop_level  = self.levels.pop
+            #self.pop_level  = self.levels.pop
         else:
             self.started = [True]
             self.is_key = [None]
@@ -446,8 +444,8 @@ class JsonMarshaler(Marshaler):
     if X_emit_str_noobject:
       def emit_string(self, prefix, tag, string, as_map_key, cache):
         encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
-        self.write_sep()
-        return self.io_write('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
+        #self.write_sep()
+        return self.io_write_sep('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
 
     def push_level(self):
         self.started.append(True)
@@ -476,26 +474,25 @@ class JsonMarshaler(Marshaler):
                 self.io_write(",")
 
     if X_started_is_key_at_once:
-        def push_level(self):
-            self.levels_append( started_is_key( True, None ))
-        def pop_level(self):
-            self.levels_pop()
-        def push_map(self):
-            self.levels_append( started_is_key( True, True ))
-        def write_sep(self):
+        push_level = None
+        pop_level  = None
+        push_map   = None
+        write_sep = None
+        def io_write_sep(self, what):
             last_level = self.levels[-1]
             if last_level.started:
                 last_level.started = False
+                self.io_write( what)
             else:
                 last = last_level.is_key
                 if last:
-                    self.io_write(":")
+                    self.io_write(":"+what)
                     last_level.is_key = False
                 elif last is False:
-                    self.io_write(",")
+                    self.io_write(","+what)
                     last_level.is_key = True
                 else:
-                    self.io_write(",")
+                    self.io_write(","+what)
 
 
     def emit_array_start(self, size):
@@ -528,60 +525,67 @@ class JsonMarshaler(Marshaler):
         self.pop_level()
         self.io_write("}")
 
-    if X_pop_push:
+    if X_started_is_key_at_once:
       def emit_array_start(self, size):
-        self.write_sep()
-        self.io_write("[")
-        self.started.append(True)
-        self.is_key.append(None)
-      def emit_array_end(self):
-        self.started.pop()
-        self.is_key.pop()
-        self.io_write("]")
-      def emit_map_start(self, size):
-        self.write_sep()
-        self.io_write("{")
-        self.started.append(True)
-        self.is_key.append(True)
-      def emit_map_end(self):
-        self.started.pop()
-        self.is_key.pop()
-        self.io_write("}")
-
-    if X_pop_push and X_started_is_key_at_once:
-      def emit_array_start(self, size):
-        self.write_sep()
-        self.io_write("[")
+        #self.write_sep()
+        self.io_write_sep("[")
         self.levels_append( started_is_key( True, None ))
       def emit_array_end(self):
         self.levels_pop()
         self.io_write("]")
       def emit_map_start(self, size):
-        self.write_sep()
-        self.io_write("{")
+        #self.write_sep()
+        self.io_write_sep("{")
         self.levels_append( started_is_key( True, True ))
       def emit_map_end(self):
         self.levels_pop()
         self.io_write("}")
 
     def emit_object(self, obj, as_map_key=False):
-        self.write_sep()
+        #self.write_sep()
         tp = obj.__class__  #tp = type(obj)
         if tp is str:
           if X_emit_object_str_tx:
-            self.io_write('"'+obj.translate( ESCAPE_DCT_tx)+'"')
+            self.io_write_sep('"'+obj.translate( ESCAPE_DCT_tx)+'"')
           else:
             self.io_write('"')
             self.io_write("".join([(ESCAPE_DCT[c]) if c in ESCAPE_DCT else c for c in obj]))
             self.io_write('"')
         elif tp in (int, float):
-            self.io_write(str(obj))
+            self.io_write_sep(str(obj))
         elif tp is bool:
-            self.io_write("true" if obj else "false")
+            self.io_write_sep("true" if obj else "false")
         elif obj is None:
-            self.io_write("null")
+            self.io_write_sep("null")
         else:
             raise AssertionError(f"Don't know how to encode: {obj} of type: {type(obj)}")
+
+    if X_marshal_map>1:
+     def emit_map(self, map, _, cache):
+      self.emit_array_start(None)
+      self.marshal(MAP_AS_ARR, False, cache)
+
+      handlers = self.handlers
+      emit_encoded = self.emit_encoded
+      emit_string = self.emit_string
+      for kv in map.items():
+       for obj,as_map_key in zip( kv,(True, False)):
+        handler = handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)
+
+        if tag == "s":  #X_marshal_str and  :most frequent case
+            emit_string("", "", escape(
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                ), as_map_key, cache)
+            continue
+        if tag in marshal_dispatch:
+            marshal_dispatch[ tag ]( self, obj,
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                as_map_key, cache,)
+        else:
+            emit_encoded(tag, handler, obj, as_map_key, cache)
+
+      self.emit_array_end()
 
 
 class VerboseSettings(object):
