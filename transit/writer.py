@@ -166,11 +166,6 @@ class Marshaler(object):
         # if "cache_enabled" in self.opts and is_cacheable(encoded, as_map_key):
         #    return self.emit_object(cache.value_to_key[encoded], as_map_key)
         return self.emit_object(encoded, as_map_key)
-    if X_emit_str_noobject:
-      def emit_string(self, prefix, tag, string, as_map_key, cache):
-        encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
-        self.write_sep()
-        return self.io_write('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
 
     def emit_boolean(self, b, as_map_key, cache):
         return self.emit_string(ESC, "?", b, True, cache) if as_map_key else self.emit_object(b)
@@ -447,6 +442,12 @@ class JsonMarshaler(Marshaler):
             self.is_key = [None]
         Marshaler.__init__(self, nopts)
         self.flush = self.io.flush
+
+    if X_emit_str_noobject:
+      def emit_string(self, prefix, tag, string, as_map_key, cache):
+        encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
+        self.write_sep()
+        return self.io_write('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
 
     def push_level(self):
         self.started.append(True)

@@ -369,6 +369,7 @@ if X_wHandler:
     float_infn= float("-Inf")
     class FloatHandler:
         tag_len_1 = True
+        tag_str = None
         @staticmethod
         def tag( f):
             return "z" if isnan(f) or f in (float_infp,float_infn) else "d"
@@ -389,16 +390,21 @@ if X_wHandler:
     UriHandler          = wHandler( URI,        tag= 'r'    , rep= lambda x: x.rep,     str= lambda x: x.rep)
     #too complex ? DateTimeHandler(object):
     DateTimeHandler.tag_len_1 = True
+    DateTimeHandler.tag_str = DateTimeHandler.tag(1)
     #no types, will not go in wdict
     VerboseDateTimeHandler = wHandler(              tag= 't'    , rep= lambda x: x.isoformat()  , str= lambda x: x.isoformat())
     SetHandler          = wHandler( set, frozenset, tag= 'set'  , rep= lambda x: TaggedMap("array", tuple(x), None),    str= rep_None)
     TaggedValueHandler  = wHandler( TaggedValue,    tag= lambda x: x.tag, rep= lambda x: x.rep  , str= rep_None)
     LinkHandler         = wHandler( Link,           tag= 'link' , rep= lambda x: x.as_map       , str= rep_None)
-    wdict.update({
+    inherited = {
         float: FloatHandler,
         datetime.datetime: DateTimeHandler,
         TaggedMap: TaggedMap,
-        })
+        }
+    for klas in inherited.values():
+        if not hasattr( klas, 'tag_len_1'): klas.tag_len_1 = False
+        if not hasattr( klas, 'tag_str'):   klas.tag_str = None
+    wdict.update( inherited)
 
 
 class WriteHandler(ClassDict):
