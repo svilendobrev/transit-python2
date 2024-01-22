@@ -16,14 +16,16 @@ X_marshal_map =1
 X_marshal_arr =1
 X_marshal_dispatch =1
 X_are_stringable_keys =1
-from transit.write_handlers import X_wHandler_tag_len_1
+from transit.write_handlers import X_wHandler_tag_len_1, X_wHandler_tag_str
 X_io_write =1
 X_pop_push =1
-X_emit_object =1
+X_emit_object_str_tx =1
+X_emit_str_noobject =1
 X_started_is_key_at_once =1
 X_io_write_as_self_getitem =0    #slower
 X_escape=1
-#TODO self.marshal_dispatch = { s : self.emit_string, ... }
+X_marshal_str =1
+# no  self.marshal_dispatch = { s : self.emit_string, ... }
 #TODO self.handlers[x][tag]
 
 import re
@@ -44,6 +46,9 @@ ESCAPE_DCT = {
 }
 for i in range(0x20):
     ESCAPE_DCT.setdefault(chr(i), "\\u{0:04x}".format(i))
+
+if X_emit_str_noobject or X_emit_object_str_tx:
+    ESCAPE_DCT_tx = str.maketrans( ESCAPE_DCT)
 
 
 class Writer(object):
@@ -156,11 +161,16 @@ class Marshaler(object):
         return self.emit_string(ESC, "_", "", True, cache) if as_map_key else self.emit_object(None)
 
     def emit_string(self, prefix, tag, string, as_map_key, cache):
-        encoded = cache.encode(str(prefix) + tag + string, as_map_key)
+        encoded = cache.encode( str(prefix) + tag + string, as_map_key)
         # TODO: Remove this optimization for the time being - it breaks cache
         # if "cache_enabled" in self.opts and is_cacheable(encoded, as_map_key):
         #    return self.emit_object(cache.value_to_key[encoded], as_map_key)
         return self.emit_object(encoded, as_map_key)
+    if X_emit_str_noobject:
+      def emit_string(self, prefix, tag, string, as_map_key, cache):
+        encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
+        self.write_sep()
+        return self.io_write('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
 
     def emit_boolean(self, b, as_map_key, cache):
         return self.emit_string(ESC, "?", b, True, cache) if as_map_key else self.emit_object(b)
@@ -247,7 +257,13 @@ class Marshaler(object):
     if X_marshal_dispatch:
      def marshal(self, obj, as_map_key, cache):
         handler = self.handlers[obj]
-        tag = handler.tag(obj)
+        tag = handler.tag_str or handler.tag(obj)
+
+        if tag == "s":  #X_marshal_str and
+            return self.emit_string("", "", escape(
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                ), as_map_key, cache)
+
         if tag in marshal_dispatch:
             marshal_dispatch[ tag ]( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
@@ -259,11 +275,17 @@ class Marshaler(object):
      def marshal_map(self, map, cache):
       handlers = self.handlers
       emit_encoded = self.emit_encoded
+      emit_string = self.emit_string
       for kv in map.items():
        for obj,as_map_key in zip( kv,(True, False)):
         handler = handlers[obj]
-        tag = handler.tag(obj)
+        tag = handler.tag_str or handler.tag(obj)
 
+        if tag == "s":  #X_marshal_str and
+            emit_string("", "", escape(
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                ), as_map_key, cache)
+            continue
         if tag in marshal_dispatch:
             marshal_dispatch[ tag ]( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
@@ -274,11 +296,16 @@ class Marshaler(object):
      def marshal_arr(self, objs, cache):
        handlers = self.handlers
        emit_encoded = self.emit_encoded
+       emit_string = self.emit_string
        as_map_key = False
        for obj in objs:
         handler = handlers[obj]
-        tag = handler.tag(obj)
+        #tag = handler.tag(obj)
+        tag = handler.tag_str or handler.tag(obj)
 
+        if tag == "s":  #X_marshal_str and
+            emit_string("", "", escape( handler.rep(obj)), as_map_key, cache)
+            continue
         if tag in marshal_dispatch:
             marshal_dispatch[ tag ]( self, obj,
                 handler.rep(obj),
@@ -412,6 +439,9 @@ class JsonMarshaler(Marshaler):
         nopts.update(opts)
         if X_started_is_key_at_once:
             self.levels = [ started_is_key( True, None)]
+            self.levels_append = self.levels.append
+            self.levels_pop = self.levels.pop
+            self.pop_level  = self.levels.pop
         else:
             self.started = [True]
             self.is_key = [None]
@@ -446,11 +476,11 @@ class JsonMarshaler(Marshaler):
 
     if X_started_is_key_at_once:
         def push_level(self):
-            self.levels.append( started_is_key( True, None ))
+            self.levels_append( started_is_key( True, None ))
         def pop_level(self):
-            self.levels.pop()
+            self.levels_pop()
         def push_map(self):
-            self.levels.append( started_is_key( True, True ))
+            self.levels_append( started_is_key( True, True ))
         def write_sep(self):
             last_level = self.levels[-1]
             if last_level.started:
@@ -521,24 +551,24 @@ class JsonMarshaler(Marshaler):
       def emit_array_start(self, size):
         self.write_sep()
         self.io_write("[")
-        self.levels.append( started_is_key( True, None ))
+        self.levels_append( started_is_key( True, None ))
       def emit_array_end(self):
-        self.levels.pop()
+        self.levels_pop()
         self.io_write("]")
       def emit_map_start(self, size):
         self.write_sep()
         self.io_write("{")
-        self.levels.append( started_is_key( True, True ))
+        self.levels_append( started_is_key( True, True ))
       def emit_map_end(self):
-        self.levels.pop()
+        self.levels_pop()
         self.io_write("}")
 
     def emit_object(self, obj, as_map_key=False):
-        tp = type(obj)
         self.write_sep()
+        tp = obj.__class__  #tp = type(obj)
         if tp is str:
-          if X_emit_object:
-            self.io_write('"'+"".join([(ESCAPE_DCT[c]) if c in ESCAPE_DCT else c for c in obj])+'"')
+          if X_emit_object_str_tx:
+            self.io_write('"'+obj.translate( ESCAPE_DCT_tx)+'"')
           else:
             self.io_write('"')
             self.io_write("".join([(ESCAPE_DCT[c]) if c in ESCAPE_DCT else c for c in obj]))

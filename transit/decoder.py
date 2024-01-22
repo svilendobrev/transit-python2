@@ -19,6 +19,7 @@ X_decode_map =1         #no much gain
 #X_decode_as_subscr =0  #cannot, 3 args  #a[b] is faster than a.method(b)
 #X_decode_self_cache =0 ?? less args= less noise but same speed probably or slower
 X_is_cache_key_as_subscr =0 # no,slower.. #a[b] is faster than a.method(b)
+X_parse_string = 1
 
 from collections import OrderedDict
 
@@ -148,30 +149,30 @@ class Decoder(object):
         Arguments follow the same convention as the top-level 'decode'
         function.
         """
+        self_decode = self._decode
         if node:
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
                 if X_mapkeystr:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                    self_decode = self._decode
                     return transit_types.frozendict( {  #pff slower than below..
                         self_decode(k, cache, 'mapkeystr') : self_decode(v, cache, as_map_key)
                         for k,v in pairs(node[1:])
                         })
                 returned_dict = {}
                 for k, v in pairs(node[1:]):
-                    key = self._decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
-                    val = self._decode(v, cache, as_map_key)
+                    key = self_decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
+                    val = self_decode(v, cache, as_map_key)
                     returned_dict[key] = val
                 return transit_types.frozendict(returned_dict)
 
-            decoded = self._decode(node[0], cache, as_map_key)
+            decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
-                return self.decode_tag(decoded.tag, self._decode(node[1], cache, as_map_key))
+                return self.decode_tag(decoded.tag, self_decode(node[1], cache, as_map_key))
             if X_FIX_ARRAY:
                 # XXX fallthrough???     hahah will repeate parseing node[0] ..broken cache
-                return (decoded, *[self._decode(x, cache, as_map_key) for x in node[1:]])
-        return tuple(self._decode(x, cache, as_map_key) for x in node)
+                return (decoded, *[self_decode(x, cache, as_map_key) for x in node[1:]])
+        return tuple(self_decode(x, cache, as_map_key) for x in node)
 
     def decode_string(self, string, cache, as_map_key):
         """Decode a string - arguments follow the same convention as the
@@ -244,6 +245,23 @@ class Decoder(object):
                 return Tag(string[2:])
             else:
                 return self.options["default_decoder"].from_rep(string[1], string[2:])
+        return string
+    if X_parse_string and X_mapkeystr:
+      _escaped = SUB+ESC+RES
+      def parse_string(self, string, cache, as_map_key):
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m==':' and as_map_key=='mapkeystr' and as_map_key in decoders:
+                return decoders[ as_map_key ].from_rep(string[2:])
+            if m in decoders:
+                return decoders[m].from_rep(string[2:])
+            elif m in self._escaped:
+                return string[1:]
+            elif m == "#":
+                return Tag(string[2:])
+            else:
+                return self.options["default_decoder"].from_rep( m, string[2:])
         return string
 
     def register(self, key_or_tag, obj):

@@ -18,6 +18,7 @@ X_wHandler_tag_len_1 =1
 #X_singledispatch =0     #no, much slower
 X_wdict = 1
 X_wHandler_as_dictAttr =0  #slower
+X_wHandler_tag_str =1 # see write_handlers
 
 import uuid
 import datetime
@@ -342,7 +343,7 @@ class LinkHandler(object):
 if X_wHandler:
     wdict = {}
     class wHandler:
-        __slots__ = 'tag rep string_rep tag_len_1'.split()
+        __slots__ = 'tag rep string_rep tag_len_1 tag_str'.split()
         def __init__( me, *types, tag, rep, str):
             me.tag = tag if callable( tag) else lambda x: tag
             me.rep = rep
@@ -350,6 +351,8 @@ if X_wHandler:
             me.tag_len_1 = False
             if X_wHandler_tag_len_1:
                 me.tag_len_1 = not callable( tag) and len(tag)==1
+            if X_wHandler_tag_str:
+                me.tag_str = tag if not callable( tag) else None
             for t in types: wdict[ t ] = me
         @classmethod
         def copy( me, o, *, tag =None, rep =None, str =None):
