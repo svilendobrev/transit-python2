@@ -13,6 +13,7 @@
 ## limitations under the License.
 
 X_simplify =1
+X_simplify_plain_dict =0    #slower
 
 from collections.abc import MutableMapping
 
@@ -43,21 +44,23 @@ class ClassDict(MutableMapping):
 
     if X_simplify:
       def __getitem__(self, key):
-        if not isinstance(key, type): key = type(key)   #same as key.__class__
+        store = self.store
+
+        #if not isinstance(key, type): key = type(key)   #same as key.__class__
+        typ = key.__class__
+        if typ in store: return store[ typ ]        #most frequent case
+        if not isinstance(key, type): key = typ
+
         try:
-            return self.store[key]
+            return store[key]
         except KeyError:
             #~~never comes here ??
-            if 0:   #maybe wrong
-                for t,h in self.store.items():
-                    if issubclass( t, key):
-                        return h
             for t in key.__bases__:
-                if t in self.store: return self.store[t]
+                if t in store: return store[t]
             # only use mro if __bases__ doesn't work to
             # avoid its perf overhead.
             for t in key.mro():
-                if t in self.store: return self.store[t]
+                if t in store: return store[t]
             raise KeyError(f"No handler found for: {key}")
 
     def __setitem__(self, key, value):
@@ -71,4 +74,26 @@ class ClassDict(MutableMapping):
 
     def __len__(self):
         return len(self.store)
+
+if X_simplify_plain_dict:   #slower than above.. cant use self[x], hence call getitem/get
+  class ClassDict(dict):
+    def __getitem__(store, key):
+        typ = key.__class__
+        store_get = store.get #super().get
+        p = store_get( typ)        #most frequent case
+        if p: return p
+        if not isinstance(key, type): key = typ
+        p = store_get( key)
+        if p: return p
+        else:
+            #~~never comes here ??
+            for t in key.__bases__:
+                p = store_get( t)
+                if p: return p
+            # only use mro if __bases__ doesn't work to
+            # avoid its perf overhead.
+            for t in key.mro():
+                p = store_get( t)
+                if p: return p
+            raise KeyError(f"No handler found for: {key}")
 

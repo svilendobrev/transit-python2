@@ -20,6 +20,11 @@ from transit.write_handlers import X_wHandler_tag_len_1
 X_io_write =1
 X_pop_push =1
 X_emit_object =1
+X_started_is_key_at_once =1
+X_io_write_as_self_getitem =0    #slower
+X_escape=1
+#TODO self.marshal_dispatch = { s : self.emit_string, ... }
+#TODO self.handlers[x][tag]
 
 import re
 import msgpack
@@ -101,6 +106,13 @@ def escape(s):
     else:
         return s
 
+if X_escape:
+  _escaped = SUB+ESC+RES
+  def escape(s):
+    if s is MAP_AS_ARR: return MAP_AS_ARR
+    if s and s[0] in _escaped:
+        return ESC + s
+    return s
 
 class Marshaler(object):
     """The base Marshaler from which all Marshalers inherit.
@@ -371,6 +383,12 @@ class MsgPackMarshaler(Marshaler):
 
 REPLACE_RE = re.compile('"')
 
+if X_started_is_key_at_once:
+    class started_is_key:
+        __slots__ = [ 'started', 'is_key']
+        def __init__( me, started, is_key):
+            me.started = started
+            me.is_key = is_key
 
 class JsonMarshaler(Marshaler):
     """The Marshaler tailor to JSON.  To use this Marshaler, specify the
@@ -392,8 +410,11 @@ class JsonMarshaler(Marshaler):
             self.io_write = io.write
         nopts = JsonMarshaler.default_opts.copy()
         nopts.update(opts)
-        self.started = [True]
-        self.is_key = [None]
+        if X_started_is_key_at_once:
+            self.levels = [ started_is_key( True, None)]
+        else:
+            self.started = [True]
+            self.is_key = [None]
         Marshaler.__init__(self, nopts)
         self.flush = self.io.flush
 
@@ -423,6 +444,29 @@ class JsonMarshaler(Marshaler):
             else:
                 self.io_write(",")
 
+    if X_started_is_key_at_once:
+        def push_level(self):
+            self.levels.append( started_is_key( True, None ))
+        def pop_level(self):
+            self.levels.pop()
+        def push_map(self):
+            self.levels.append( started_is_key( True, True ))
+        def write_sep(self):
+            last_level = self.levels[-1]
+            if last_level.started:
+                last_level.started = False
+            else:
+                last = last_level.is_key
+                if last:
+                    self.io_write(":")
+                    last_level.is_key = False
+                elif last is False:
+                    self.io_write(",")
+                    last_level.is_key = True
+                else:
+                    self.io_write(",")
+
+
     def emit_array_start(self, size):
         self.write_sep()
         self.io_write("[")
@@ -430,17 +474,6 @@ class JsonMarshaler(Marshaler):
 
     def emit_array_end(self):
         self.pop_level()
-        self.io_write("]")
-
-    if X_pop_push:
-      def emit_array_start(self, size):
-        self.write_sep()
-        self.io_write("[")
-        self.started.append(True)
-        self.is_key.append(None)
-      def emit_array_end(self):
-        self.started.pop()
-        self.is_key.pop()
         self.io_write("]")
 
     def emit_map(self, m, _, cache):
@@ -465,6 +498,15 @@ class JsonMarshaler(Marshaler):
         self.io_write("}")
 
     if X_pop_push:
+      def emit_array_start(self, size):
+        self.write_sep()
+        self.io_write("[")
+        self.started.append(True)
+        self.is_key.append(None)
+      def emit_array_end(self):
+        self.started.pop()
+        self.is_key.pop()
+        self.io_write("]")
       def emit_map_start(self, size):
         self.write_sep()
         self.io_write("{")
@@ -473,6 +515,22 @@ class JsonMarshaler(Marshaler):
       def emit_map_end(self):
         self.started.pop()
         self.is_key.pop()
+        self.io_write("}")
+
+    if X_pop_push and X_started_is_key_at_once:
+      def emit_array_start(self, size):
+        self.write_sep()
+        self.io_write("[")
+        self.levels.append( started_is_key( True, None ))
+      def emit_array_end(self):
+        self.levels.pop()
+        self.io_write("]")
+      def emit_map_start(self, size):
+        self.write_sep()
+        self.io_write("{")
+        self.levels.append( started_is_key( True, True ))
+      def emit_map_end(self):
+        self.levels.pop()
         self.io_write("}")
 
     def emit_object(self, obj, as_map_key=False):

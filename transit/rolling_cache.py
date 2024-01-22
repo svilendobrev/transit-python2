@@ -13,9 +13,9 @@
 ## limitations under the License.
 
 X_rework =1
-X_encode_key_map =1
-X_is_cacheable =1
-X_is_cache_key =1
+X_encode_key_map =1 # func-only: 40% less
+X_is_cacheable =1   # func-only: 65% less
+X_is_cache_key =1   # func-only: 15% less
 
 from transit.constants import SUB, MAP_AS_ARR
 
@@ -113,31 +113,38 @@ class RollingCache(object):
 if X_rework:
   #XXX this above is broken
   ## see transit-java-code/impl/ReadCache.java + transit-java-code/impl/WriteCache.java
-  # use below + see Decoder.decoder_list
+  # use below + see Decoder.decode_list / Decoder.decode_string
 
   class RollingCache( dict):    #https://github.com/cognitect/transit-format
     X_rework = X_rework
-    def encode(self, name, as_map_key=False):     #as of java:WriteCache.cacheWrite
+    def encode( self, name, as_map_key=False):     #as of java:WriteCache.cacheWrite
         #if not is_cacheable( name, as_map_key): return name
-        cache = self
-        if name in cache: return cache[name]
+        if name in self: return self[ name]
         if is_cacheable( name, as_map_key):     #better here
             self.encache( name, False)
         return name
     #decode is at Decoder.decode_string
     def encache( self, name, key2name=False):    #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
-        cache = self
-        l = len( cache)
+        l = len( self)
         if l >= CACHE_SIZE:
-            cache.clear()
+            self.clear()
             l = 0
-        if X_encode_key_map:
-            key = encode_i2key_map[ l ]       #no much gain?
-        else:
-            key = encode_key( l)
+        key = encode_key( l)
         if key2name:
-            cache[ key ] = name
+            self[ key ] = name
         else:
-            cache[ name ] = key
-        return key,name
+            self[ name ] = key
+        #return key,name
+    if X_encode_key_map:
+      def encache( self, name, key2name=False):    #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
+        l = len( self)
+        if l >= CACHE_SIZE:
+            self.clear()
+            l = 0
+        key = encode_i2key_map[ l ]
+        if key2name:
+            self[ key ] = name
+        else:
+            self[ name ] = key
+        #return key,name
 

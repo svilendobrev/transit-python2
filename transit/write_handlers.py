@@ -14,8 +14,10 @@
 
 X_wHandler =1
 X_wHandler_tag_len_1 =1
+#X_wHandler_tag_as_subscr =0 ??-not-called-enough #a[b] is faster than a.method(b)
 #X_singledispatch =0     #no, much slower
 X_wdict = 1
+X_wHandler_as_dictAttr =0  #slower
 
 import uuid
 import datetime
@@ -340,11 +342,12 @@ class LinkHandler(object):
 if X_wHandler:
     wdict = {}
     class wHandler:
-        tag_len_1 = False
+        __slots__ = 'tag rep string_rep tag_len_1'.split()
         def __init__( me, *types, tag, rep, str):
             me.tag = tag if callable( tag) else lambda x: tag
             me.rep = rep
             me.string_rep = str
+            me.tag_len_1 = False
             if X_wHandler_tag_len_1:
                 me.tag_len_1 = not callable( tag) and len(tag)==1
             for t in types: wdict[ t ] = me
@@ -383,7 +386,8 @@ if X_wHandler:
     UriHandler          = wHandler( URI,        tag= 'r'    , rep= lambda x: x.rep,     str= lambda x: x.rep)
     #too complex ? DateTimeHandler(object):
     DateTimeHandler.tag_len_1 = True
-    #VerboseDateTimeHandler = wHandler( tag= 't' , rep= lambda x: x.isoformat()  , str= lambda x: x.isoformat())
+    #no types, will not go in wdict
+    VerboseDateTimeHandler = wHandler(              tag= 't'    , rep= lambda x: x.isoformat()  , str= lambda x: x.isoformat())
     SetHandler          = wHandler( set, frozenset, tag= 'set'  , rep= lambda x: TaggedMap("array", tuple(x), None),    str= rep_None)
     TaggedValueHandler  = wHandler( TaggedValue,    tag= lambda x: x.tag, rep= lambda x: x.rep  , str= rep_None)
     LinkHandler         = wHandler( Link,           tag= 'link' , rep= lambda x: x.as_map       , str= rep_None)

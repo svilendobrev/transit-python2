@@ -15,6 +15,10 @@
 X_FIX_ARRAY = 1
 X_mapkeystr = 1
 X_tuple_via_list =1     #some gain
+X_decode_map =1         #no much gain
+#X_decode_as_subscr =0  #cannot, 3 args  #a[b] is faster than a.method(b)
+#X_decode_self_cache =0 ?? less args= less noise but same speed probably or slower
+X_is_cache_key_as_subscr =0 # no,slower.. #a[b] is faster than a.method(b)
 
 from collections import OrderedDict
 
@@ -25,6 +29,15 @@ from transit.transit_types import true, false
 from transit.constants import MAP_AS_ARR, ESC, SUB, RES
 from transit.rolling_cache import RollingCache, is_cacheable, is_cache_key
 
+if X_is_cache_key_as_subscr:
+  class _is_cache_key:
+    __getitem__ = staticmethod( is_cache_key)
+  is_cache_key_as_subscr = _is_cache_key()    #singleton
+  class _is_cacheable:
+    @staticmethod
+    def __getitem__( args ):
+        return is_cacheable( *args)
+  is_cacheable_as_subscr = _is_cacheable()    #singleton
 
 class Tag(object):
     def __init__(self, tag):
@@ -82,6 +95,8 @@ class Decoder(object):
         self.decoders = self.options["decoders"]
         # Always ensure we control the ground decoders
         self.decoders.update(ground_decoders)
+        if X_decode_map:
+            self.make_decode_map()
 
     def decode(self, node, cache=None, as_map_key=False):
         """Given a node of data (any supported decodeable obj - string, dict,
@@ -96,7 +111,8 @@ class Decoder(object):
         return self._decode(node, cache, as_map_key)
 
     def _decode(self, node, cache, as_map_key):
-        tp = type(node)
+        #tp = type(node)
+        tp = node.__class__
         if tp is str:
             return self.decode_string(node, cache, as_map_key)
         elif tp is bytes:
@@ -107,6 +123,22 @@ class Decoder(object):
             return self.decode_list(node, cache, as_map_key)
         elif tp is bool:
             return true if node else false
+        return node
+    if X_decode_map:
+      def make_decode_map( self):
+        self._decode_map = {
+            str: self.decode_string,
+            bytes: lambda node, *a,**ka: self.decode_string( node.decode("utf-8"), *a,**ka),
+            dict:  self.decode_hash,
+            OrderedDict: self.decode_hash,
+            list: self.decode_list,
+            bool: lambda node, *a,**ka: true if node else false,
+            }
+      def _decode(self, node, cache, as_map_key):
+        tp = node.__class__
+        self_decode_map = self._decode_map
+        if tp in self_decode_map:
+            return self_decode_map[ tp ]( node, cache, as_map_key)
         return node
 
     def decode_list(self, node, cache, as_map_key):
@@ -157,6 +189,14 @@ class Decoder(object):
             return cache[ string ]
         pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
         if is_cacheable(string, as_map_key):
+            cache.encache(pstring, True)
+        return pstring
+      if X_is_cache_key_as_subscr:
+       def decode_string(self, string, cache, as_map_key):
+        if is_cache_key_as_subscr[ string ]:
+            return cache[ string ]
+        pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
+        if is_cacheable_as_subscr[ (string, as_map_key)]:
             cache.encache(pstring, True)
         return pstring
 
