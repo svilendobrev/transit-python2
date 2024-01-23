@@ -12,8 +12,8 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-X_marshal_map =2
-X_marshal_arr =2
+X_marshal_map =0
+X_marshal_arr =0
 X_marshal_dispatch =1
 X_are_stringable_keys =1
 from transit.write_handlers import X_wHandler_tag_len_1, X_wHandler_tag_str
@@ -27,8 +27,8 @@ X_escape=1
 X_marshal_str =1
 X_io_write_sep =1
 # no  self.marshal_dispatch = { s : self.emit_string, ... }
+X_self_marshal_dispatch =0
 # ?? self.handlers[x][tag]
-
 X_encode_is_encache =1
 
 import re
@@ -133,6 +133,7 @@ class Marshaler(object):
     def __init__(self, opts={}):
         self.opts = opts
         self._init_handlers()
+        self.make_marshal_dispatch()
 
     def _init_handlers(self):
         self.handlers = WriteHandler()
@@ -160,39 +161,44 @@ class Marshaler(object):
                     return False
             return True
 
-    def emit_nil(self, _, as_map_key, cache):
+    def emit_nil(self, as_map_key, cache, **ignore):
         return self.emit_string(ESC, "_", "", True, cache) if as_map_key else self.emit_object(None)
 
-    def emit_string(self, prefix, tag, string, as_map_key, cache):
-        encoded = cache.encode( str(prefix) + tag + string, as_map_key)
+    def emit_string(self, prefix, tag, rep, as_map_key, cache,  obj=None):
+        if obj is not None:
+            prefix=tag=''
+            rep = escape( rep)
+        encoded = cache.encode( prefix + tag + rep, as_map_key)
         # TODO: Remove this optimization for the time being - it breaks cache
         # if "cache_enabled" in self.opts and is_cacheable(encoded, as_map_key):
         #    return self.emit_object(cache.value_to_key[encoded], as_map_key)
         return self.emit_object(encoded, as_map_key)
 
-    def emit_boolean(self, b, as_map_key, cache):
-        return self.emit_string(ESC, "?", b, True, cache) if as_map_key else self.emit_object(b)
+    def emit_boolean(self, rep, as_map_key, cache, **ignore):
+        return self.emit_string(ESC, "?", rep, True, cache) if as_map_key else self.emit_object(rep)
 
-    def emit_int(self, tag, i, rep, as_map_key, cache):
-        if isinstance(rep, int) and i <= self.opts["max_int"] and i >= self.opts["min_int"]:
-            return self.emit_object(i, as_map_key)
+    def emit_int(self, tag, obj, rep, as_map_key, cache, **ignore):
+        if isinstance(rep, int) and obj <= self.opts["max_int"] and obj >= self.opts["min_int"]:
+            return self.emit_object(obj, as_map_key)
         else:
             return self.emit_string(ESC, tag, str(rep), as_map_key, cache)
 
-    def emit_double(self, d, as_map_key, cache):
-        return self.emit_string(ESC, "d", d, True, cache) if as_map_key else self.emit_object(d)
+    def emit_double(self, rep, as_map_key, cache, **ignore):
+        return self.emit_string(ESC, "d", rep, True, cache) if as_map_key else self.emit_object(rep)
 
-    def emit_array(self, a, _, cache):
-        self.emit_array_start(len(a))
-        for x in a:
-            self.marshal(x, False, cache)
+    def emit_array(self, rep, as_map_key, cache, **ignore):
+        self.emit_array_start(len(rep))
+        marshal = self.marshal
+        for x in rep:
+            marshal(x, False, cache)
         self.emit_array_end()
 
-    def emit_map(self, m, _, cache):  # use map as object from above, have to overwrite default parser.
-        self.emit_map_start(len(m))
-        for k, v in m.items():
-            self.marshal(k, True, cache)
-            self.marshal(v, False, cache)
+    def emit_map(self, obj, as_map_key, cache, **ignore):  # use map as object from above, have to overwrite default parser.
+        self.emit_map_start(len(obj))
+        marshal = self.marshal
+        for k,v in obj.items():
+            marshal(k, True, cache)
+            marshal(v, False, cache)
         self.emit_map_end()
 
     def emit_cmap(self, m, _, cache):
@@ -201,7 +207,7 @@ class Marshaler(object):
         self.marshal(flatten_map(m), False, cache)
         self.emit_map_end()
 
-    def emit_tagged(self, tag, rep, cache):
+    def emit_tagged(self, tag, rep, cache, **ignore):
         self.emit_array_start(2)
         self.emit_string(ESC, "#", tag, False, cache)
         self.marshal(rep, False, cache)
@@ -248,14 +254,25 @@ class Marshaler(object):
         handler = self.handlers[obj]
         tag = handler.tag_str or handler.tag(obj)
 
-        if tag == "s":  #X_marshal_str and  :most frequent case
-            return self.emit_string("", "", escape(
-                handler.string_rep(obj) if as_map_key else handler.rep(obj),
-                ), as_map_key, cache)
-        if tag in marshal_dispatch:
+        #if tag == "s":  #X_marshal_str and  :most frequent case
+        #    return self.emit_string("", "", escape(
+        #        handler.string_rep(obj) if as_map_key else handler.rep(obj),
+        #        ), as_map_key, cache)
+        #if tag in marshal_dispatch:
+        #    return marshal_dispatch[ tag ]( self, obj,
+        if X_self_marshal_dispatch:
+          smarshal_dispatch = self.marshal_dispatch
+          if tag in smarshal_dispatch:
+            return smarshal_dispatch[ tag ]( obj=obj, tag=tag,
+                rep= handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                as_map_key=as_map_key, cache=cache,
+                prefix=''   #for str
+                )
+        else:
+          if tag in marshal_dispatch:
             return marshal_dispatch[ tag ]( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
-                as_map_key, cache,)
+                as_map_key, cache)
         return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
     if X_marshal_map:
@@ -268,11 +285,11 @@ class Marshaler(object):
         handler = handlers[obj]
         tag = handler.tag_str or handler.tag(obj)
 
-        if tag == "s":  #X_marshal_str and  :most frequent case
-            emit_string("", "", escape(
-                handler.string_rep(obj) if as_map_key else handler.rep(obj),
-                ), as_map_key, cache)
-            continue
+        #if tag == "s":  #X_marshal_str and  :most frequent case
+        #    emit_string("", "", escape(
+        #        handler.string_rep(obj) if as_map_key else handler.rep(obj),
+        #        ), as_map_key, cache)
+        #    continue
         if tag in marshal_dispatch:
             marshal_dispatch[ tag ]( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
@@ -323,7 +340,7 @@ class Marshaler(object):
         else:
             raise AssertionError(f"Handler must provide a non-nil tag: {handler}")
 
-    def dispatch_map(self, rep, as_map_key, cache):
+    def dispatch_map(self, rep, as_map_key, cache, **ignore):
         """Used to determine and dipatch the writing of a map - a simple
         map with strings as keys, or a complex map, whose keys are also
         compound types.
@@ -340,9 +357,22 @@ class Marshaler(object):
         """
         self.handlers[obj_type] = handler_class
 
+    def make_marshal_dispatch( self):
+        self.marshal_dispatch = {
+    "_": self.emit_nil,
+    "?": self.emit_boolean,
+    "s": self.emit_string, # ("", "", escape(rep), as_map_key, cache),
+    "i": self.emit_int,
+    "n": self.emit_int,
+    "d": self.emit_double,
+    "'": self.emit_tagged,
+    "array": self.emit_array,
+    "map":   self.dispatch_map,
+    }
 
-marshal_dispatch = {
-    "_": lambda self, obj, rep, as_map_key, cache: self.emit_nil(rep, as_map_key, cache),
+if not X_self_marshal_dispatch:
+ marshal_dispatch = {
+    "_": lambda self, obj, rep, as_map_key, cache: self.emit_nil(0,0, as_map_key, cache),
     "?": lambda self, obj, rep, as_map_key, cache: self.emit_boolean(rep, as_map_key, cache),
     "s": lambda self, obj, rep, as_map_key, cache: self.emit_string("", "", escape(rep), as_map_key, cache),
     "i": lambda self, i, rep, as_map_key, cache: self.emit_int("i", i, rep, as_map_key, cache),
@@ -442,13 +472,19 @@ class JsonMarshaler(Marshaler):
             self.is_key = [None]
 
     if X_emit_str_noobject:
-      def emit_string(self, prefix, tag, string, as_map_key, cache):
-        encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
+      def emit_string(self, prefix, tag, rep, as_map_key, cache,  obj=None):
+        if obj is not None:
+            prefix=tag=''
+            rep = escape( rep)
+        encoded = cache.encode( prefix + tag + rep, as_map_key)      #unneeded str(prefix)
         #self.write_sep()
         return self.io_write_sep('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
     if X_emit_str_noobject and X_encode_is_encache and getattr( RollingCache, 'X_is_cacheable_inside_encache', 0):
-      def emit_string(self, prefix, tag, string, as_map_key, cache):
-        name = prefix + tag + string            #unneeded str(prefix)
+      def emit_string(self, prefix, tag, rep, as_map_key, cache,  obj=None):
+        if obj is not None:
+            prefix=tag=''
+            rep = escape( rep)
+        name = prefix + tag + rep               #unneeded str(prefix)
         if name in cache:
             encoded = cache[ name]
         else:
@@ -514,16 +550,17 @@ class JsonMarshaler(Marshaler):
         self.pop_level()
         self.io_write("]")
 
-    def emit_map(self, m, _, cache):
+    def emit_map(self, obj, as_map_key, cache, **ignore):
         """Emits array as per default JSON spec."""
         self.emit_array_start(None)
-        self.marshal(MAP_AS_ARR, False, cache)
+        marshal = self.marshal
+        marshal(MAP_AS_ARR, False, cache)
         if X_marshal_map:
-          self.marshal_map( m, cache)
+          marshal_map( obj, cache)
         else:
-          for k, v in m.items():
-            self.marshal(k, True, cache)
-            self.marshal(v, False, cache)
+          for k, v in obj.items():
+            marshal(k, True, cache)
+            marshal(v, False, cache)
         self.emit_array_end()
 
     def emit_map_start(self, size):
@@ -614,17 +651,22 @@ class VerboseSettings(object):
     def _init_handlers(self):
         self.handlers = self._verbose_handlers(WriteHandler())
 
-    def emit_string(self, prefix, tag, string, as_map_key, cache):
-        return self.emit_object(str(prefix) + tag + string, as_map_key)
+    def emit_string(self, prefix, tag, rep, as_map_key, cache,  obj=None):
+        if obj is not None:
+            prefix=tag=''
+            rep = escape( rep)
+        return self.emit_object(prefix + tag + rep, as_map_key)
 
-    def emit_map(self, m, _, cache):
+    emit_map = Marshaler.emit_map
+    if 0:
+      def emit_map(self, m, _, cache):
         self.emit_map_start(len(m))
         for k, v in m.items():
             self.marshal(k, True, cache)
             self.marshal(v, False, cache)
         self.emit_map_end()
 
-    def emit_tagged(self, tag, rep, cache):
+    def emit_tagged(self, tag, rep, cache, **ignore):
         self.emit_map_start(1)
         self.emit_object(ESC + "#" + tag, True)
         self.marshal(rep, False, cache)
