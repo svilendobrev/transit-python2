@@ -27,7 +27,7 @@ X_escape=1
 X_marshal_str =1
 X_io_write_sep =1
 # no  self.marshal_dispatch = { s : self.emit_string, ... }
-#TODO self.handlers[x][tag]
+# ?? self.handlers[x][tag]
 
 X_encode_is_encache =1
 
@@ -427,9 +427,16 @@ class JsonMarshaler(Marshaler):
     }
 
     def __init__(self, io, opts={}):
-        if io: self.set_io( io)
+        if io: self.reset( io)
         nopts = JsonMarshaler.default_opts.copy()
         nopts.update(opts)
+        Marshaler.__init__(self, nopts)
+
+    def reset(self, io):
+        self.io = io
+        if X_io_write:
+            self.io_write = io and io.write
+        self.flush = io and io.flush
         if X_started_is_key_at_once:
             self.levels = [ started_is_key( True, None)]
             self.levels_append = self.levels.append
@@ -438,13 +445,6 @@ class JsonMarshaler(Marshaler):
         else:
             self.started = [True]
             self.is_key = [None]
-        Marshaler.__init__(self, nopts)
-
-    def set_io(self, io):
-        self.io = io
-        if X_io_write and io:
-            self.io_write = io.write
-        self.flush = self.io.flush
 
     if X_emit_str_noobject:
       def emit_string(self, prefix, tag, string, as_map_key, cache):
