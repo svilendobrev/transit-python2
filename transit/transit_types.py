@@ -15,8 +15,8 @@
 X_frozendict =1
 #X_slots =0     #~no gain
 X_keysym =1     #if on, all X_* below are irrelevant
-X_noassert=1
-X_parse_initial=0   #NO, _parse is never called anyway
+#X_noassert=1
+#X_parse_initial=0   #NO, _parse is never called anyway
 X_prove_parse_unused =0
 
 from functools import reduce
@@ -24,10 +24,6 @@ from collections.abc import Mapping, Hashable
 
 
 class Named(object):
-    if X_noassert:
-      def __init__(self, value):
-        self.str = value
-        self.hv = value.__hash__()
 
     def _parse(self):
         if X_prove_parse_unused: assert 0
@@ -50,8 +46,7 @@ class Named(object):
 
 
 class Keyword(Named):
-    if not X_noassert:
-     def __init__(self, value):
+    def __init__(self, value):
         assert isinstance(value, str)
         self.str = value
         self.hv = value.__hash__()
@@ -76,8 +71,7 @@ class Keyword(Named):
 
 
 class Symbol(Named):
-    if not X_noassert:
-     def __init__(self, value):
+    def __init__(self, value):
         assert isinstance(value, str)
         self.str = value
         self.hv = value.__hash__()
@@ -110,6 +104,15 @@ if X_keysym:
         @property
         def str( self): return str(self)
         #XXX WTF is __call__ ?
+        #these used only in tests
+        @property
+        def name( me):          # as of above _parse: a/b -> b ; a/ -> / ; /b -> b ; / -> / ; a -> a ; '' -> ''
+            if X_prove_parse_unused: assert 0
+            return str(me) if '/' not in me else (me.split('/')[-1] or '/')
+        @property
+        def namespace( me):     # as of above _parse: a/b -> a ; a/ -> a ; /b -> None ; / -> None ; a -> None ; '' -> None
+            if X_prove_parse_unused: assert 0
+            return None if '/' not in me else (me.split('/')[0] or None)
     class Symbol( Named): pass
     class Keyword( Named):
         def __repr__(self): return f"<Keyword {self}>"
