@@ -408,9 +408,9 @@ REPLACE_RE = re.compile('"')
 if X_started_is_key_at_once:
     class started_is_key:
         __slots__ = [ 'started', 'is_key']
-        def __init__( me, started, is_key):
-            me.started = started
-            me.is_key = is_key
+        def __init__(self, started, is_key):
+            self.started = started
+            self.is_key = is_key
 
 class JsonMarshaler(Marshaler):
     """The Marshaler tailor to JSON.  To use this Marshaler, specify the
@@ -427,9 +427,7 @@ class JsonMarshaler(Marshaler):
     }
 
     def __init__(self, io, opts={}):
-        self.io = io
-        if X_io_write:
-            self.io_write = io.write
+        if io: self.set_io( io)
         nopts = JsonMarshaler.default_opts.copy()
         nopts.update(opts)
         if X_started_is_key_at_once:
@@ -441,6 +439,11 @@ class JsonMarshaler(Marshaler):
             self.started = [True]
             self.is_key = [None]
         Marshaler.__init__(self, nopts)
+
+    def set_io(self, io):
+        self.io = io
+        if X_io_write and io:
+            self.io_write = io.write
         self.flush = self.io.flush
 
     if X_emit_str_noobject:
