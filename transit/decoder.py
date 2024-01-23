@@ -99,6 +99,7 @@ class Decoder(object):
     known as Ground Decoders, and are needed to maintain bottom-tier
     compatibility.
     """
+    map_factory = transit_types.frozendict
 
     def __init__(self, options={}):
         self.options = default_options.copy()
@@ -170,7 +171,7 @@ class Decoder(object):
                 # key must be decoded before value for caching to work.
                 if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                    return transit_types.frozendict( {  #pff slower than below..
+                    return self.map_factory( {  #pff slower than below..
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, as_map_key)
                         for k,v in pairs(node[1:])
                         })
@@ -179,7 +180,7 @@ class Decoder(object):
                     key = self_decode(k, cache, _X_mapkeystr)
                     val = self_decode(v, cache, as_map_key)
                     returned_dict[key] = val
-                return transit_types.frozendict(returned_dict)
+                return self.map_factory(returned_dict)
 
             decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
@@ -220,7 +221,7 @@ class Decoder(object):
         if len(hash) != 1:
             if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                    return transit_types.frozendict( {  #pff slower than below..
+                    return self.map_factory( {  #pff slower than below..
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, False)
                         for k,v in hash.items()
                         })
@@ -234,14 +235,14 @@ class Decoder(object):
                 key = self_decode(k, cache, _X_mapkeystr)
                 val = self_decode(v, cache, False)
                 h[key] = val
-            return transit_types.frozendict(h)
+            return self.map_factory(h)
         else:
             key = list(hash)[0]
             value = hash[key]
             key = self_decode(key, cache, True)
             if isinstance(key, Tag):
                 return self.decode_tag(key.tag, self_decode(value, cache, as_map_key))
-        return transit_types.frozendict({key: self_decode(value, cache, False)})
+        return self.map_factory({key: self_decode(value, cache, False)})
 
     def parse_string(self, string, cache, as_map_key):
         if string.startswith(ESC):
