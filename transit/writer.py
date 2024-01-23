@@ -211,19 +211,19 @@ class Marshaler(object):
         rep = handler.rep(obj)
         if len(tag) == 1:
             if isinstance(rep, str):
-                self.emit_string(ESC, tag, rep, as_map_key, cache)
+                return self.emit_string(ESC, tag, rep, as_map_key, cache)
             elif as_map_key or self.opts["prefer_strings"]:
                 rep = handler.string_rep(obj)
                 if isinstance(rep, str):
-                    self.emit_string(ESC, tag, rep, as_map_key, cache)
+                    return self.emit_string(ESC, tag, rep, as_map_key, cache)
                 else:
                     raise AssertionError(f"Cannot be encoded as string: {str({'tag': tag, 'rep': rep, 'obj': obj})}")
             else:
-                self.emit_tagged(tag, rep, cache)
+                return self.emit_tagged(tag, rep, cache)
         elif as_map_key:
             raise AssertionError(f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}")
         else:
-            self.emit_tagged(tag, rep, cache)
+            return self.emit_tagged(tag, rep, cache)
 
     def marshal(self, obj, as_map_key, cache):
         """Marshal an individual obj, potentially as part of another container
@@ -237,15 +237,11 @@ class Marshaler(object):
         f = marshal_dispatch.get(tag)
 
         if f:
-            f(
-                self,
-                obj,
+            return f( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
-                as_map_key,
-                cache,
-            )
+                as_map_key, cache)
         else:
-            self.emit_encoded(tag, handler, obj, as_map_key, cache)
+            return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
     if X_marshal_dispatch:
      def marshal(self, obj, as_map_key, cache):
@@ -256,13 +252,11 @@ class Marshaler(object):
             return self.emit_string("", "", escape(
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 ), as_map_key, cache)
-
         if tag in marshal_dispatch:
-            marshal_dispatch[ tag ]( self, obj,
+            return marshal_dispatch[ tag ]( self, obj,
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 as_map_key, cache,)
-        else:
-            self.emit_encoded(tag, handler, obj, as_map_key, cache)
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
     if X_marshal_map:
      def marshal_map(self, map, cache):
@@ -321,10 +315,11 @@ class Marshaler(object):
         tag = handler.tag(obj)
         if tag:
             if len(tag) == 1:
-                self.marshal(TaggedValue(QUOTE, obj), False, cache)
+                r = self.marshal(TaggedValue(QUOTE, obj), False, cache)
             else:
-                self.marshal(obj, False, cache)
+                r = self.marshal(obj, False, cache)
             self.flush()
+            return r
         else:
             raise AssertionError(f"Handler must provide a non-nil tag: {handler}")
 
