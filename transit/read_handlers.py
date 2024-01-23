@@ -25,6 +25,9 @@ from transit.helpers import pairs
 ## Read handlers are used by the decoder when parsing/reading in Transit
 ## data and returning Python objects
 
+#XXX these are almost never used.. so no much gain
+#X_static =1
+X_plain =1  #XXX rely on decoder not needing .from_rep i.e. decoder.X_decoders_direct
 
 class DefaultHandler(object):
     @staticmethod
@@ -42,7 +45,6 @@ class KeywordHandler(object):
     @staticmethod
     def from_rep(v):
         return transit_types.Keyword(v)
-
 
 class SymbolHandler(object):
     @staticmethod
@@ -155,3 +157,24 @@ class SpecialNumbersHandler(object):
         if z == "-INF":
             return float("-Inf")
         raise ValueError(f"Don't know how to handle: {z} as 'z'")
+
+
+if X_plain:
+    DefaultHandler = transit_types.TaggedValue
+    #NoneHandler
+    KeywordHandler = transit_types.Keyword
+    SymbolHandler  = transit_types.Symbol
+    BigDecimalHandler = Decimal
+    #BooleanHandler
+    IntHandler = int
+    FloatHandler = float
+    #UuidHandler
+    UriHandler = transit_types.URI
+    #DateHandler
+    BigIntegerHandler = int
+    #LinkHandler
+    #ListHandler
+    SetHandler = frozenset
+    #CmapHandler
+    #IdentityHandler
+    #SpecialNumbersHandler

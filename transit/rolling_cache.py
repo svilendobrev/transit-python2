@@ -16,6 +16,7 @@ X_rework =1
 X_encode_key_map =1 # func-only: 40% less
 X_is_cacheable =1   # func-only: 65% less
 X_is_cache_key =1   # func-only: 15% less
+X_is_cacheable_inside_encache =1
 
 from transit.constants import SUB, MAP_AS_ARR
 
@@ -48,12 +49,6 @@ def decode_key(s):
     return (ord(s[2]) - FIRST_ORD) + (CACHE_CODE_DIGITS * (ord(s[1]) - FIRST_ORD))
 
 if X_encode_key_map:
-    if 0:
-        encode_i2key_map = dict(
-                (k*CACHE_CODE_DIGITS+l, "^" + ('' if not k else chr(k + FIRST_ORD)) + chr(l + FIRST_ORD))
-                for k in range( CACHE_CODE_DIGITS)
-                for l in range( CACHE_CODE_DIGITS)
-                )
     encode_i2key_map = dict( (i,encode_key(i)) for i in range( CACHE_SIZE))
 
 def is_cacheable(string, as_map_key=False):
@@ -113,7 +108,7 @@ class RollingCache(object):
 if X_rework:
   #XXX this above is broken
   ## see transit-java-code/impl/ReadCache.java + transit-java-code/impl/WriteCache.java
-  # use below + see Decoder.decode_list / Decoder.decode_string
+  # usage in writer.emit_string and Decoder.decode_string
 
   class RollingCache( dict):    #https://github.com/cognitect/transit-format
     X_rework = X_rework
@@ -123,8 +118,10 @@ if X_rework:
         if is_cacheable( name, as_map_key):     #better here
             self.encache( name, False)
         return name
+    #encode is at Writer.emit_string
     #decode is at Decoder.decode_string
-    def encache( self, name, key2name=False):    #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
+    #encache as of #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
+    def encache( self, name, key2name=False):
         l = len( self)
         if l >= CACHE_SIZE:
             self.clear()
@@ -136,7 +133,7 @@ if X_rework:
             self[ name ] = key
         #return key,name
     if X_encode_key_map:
-      def encache( self, name, key2name=False):    #~as of java:WriteCache.cacheWrite + ReadCache.cacheRead
+      def encache( self, name, key2name=False):
         l = len( self)
         if l >= CACHE_SIZE:
             self.clear()
@@ -147,4 +144,24 @@ if X_rework:
         else:
             self[ name ] = key
         #return key,name
+
+    if X_encode_key_map and X_is_cacheable_inside_encache:
+      X_is_cacheable_inside_encache = X_is_cacheable_inside_encache
+      def encache( self, name, key2name =False, as_map_key =False, name4is_cacheable =None):
+        string = name4is_cacheable or name
+        #if is_cacheable
+        if len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:")) :
+            l = len( self)
+            if l >= CACHE_SIZE:
+                self.clear()
+                l = 0
+            key = encode_i2key_map[ l ]
+            if key2name:
+                self[ key ] = name
+            else:
+                self[ name ] = key
+      def encode( self, name, as_map_key=False):     #as of java:WriteCache.cacheWrite
+        if name in self: return self[ name]
+        self.encache( name, False, as_map_key)
+        return name
 

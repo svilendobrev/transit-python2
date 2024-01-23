@@ -13,13 +13,19 @@
 ## limitations under the License.
 
 X_FIX_ARRAY = 1
-X_mapkeystr = 1
-X_tuple_via_list =1     #some gain
-X_decode_map =1         #no much gain
+X_mapkeystr = 0     #treat map-keys separately from just Keyword .. no need if all Keywords are treated-same
+_X_mapkeystr = 'mapkeystr' if X_mapkeystr else True
+X_mapcompreh= 0         #no gain ?
+#X_tuple_via_list =1    #unclear gain.. into X_FIX_ARRAY
+X_decode_map =0         #some gain, some loss..
 #X_decode_as_subscr =0  #cannot, 3 args  #a[b] is faster than a.method(b)
 #X_decode_self_cache =0 ?? less args= less noise but same speed probably or slower
-X_is_cache_key_as_subscr =0 # no,slower.. #a[b] is faster than a.method(b)
+X_is_cache_key_as_subscr =0     #no much gain..    #a[b] is faster than a.method(b)
+X_is_cache_key_eq_in_cache =1   #better this.. avoid is_cache_key() at all
 X_parse_string = 1
+X_decoders_direct =1    # remove klass.from_rep , direct funcs instead
+X_tag_in_decoders =1
+X_decode_str_with_parse =1  #only done with RollingCache.X_rework, X_tag_in_decoders, no X_mapkeystr
 
 from collections import OrderedDict
 
@@ -39,6 +45,8 @@ if X_is_cache_key_as_subscr:
     def __getitem__( args ):
         return is_cacheable( *args)
   is_cacheable_as_subscr = _is_cacheable()    #singleton
+
+assert getattr( rh, 'X_plain', 0) and X_decoders_direct
 
 class Tag(object):
     def __init__(self, tag):
@@ -76,6 +84,9 @@ ground_decoders = {
     "'": rh.IdentityHandler,
 }
 
+if X_tag_in_decoders:
+    assert X_decoders_direct
+    ground_decoders[ "#" ] = Tag
 
 class Decoder(object):
     """The Decoder is the lowest level entry point for parsing, decoding, and
@@ -98,6 +109,10 @@ class Decoder(object):
         self.decoders.update(ground_decoders)
         if X_decode_map:
             self.make_decode_map()
+        if X_decoders_direct:
+            def from_repper(x): return getattr( x, 'from_rep', x)
+            self.decoders = dict( (k, from_repper(v)) for k,v in self.decoders.items())
+            self.options["default_decoder"] = from_repper( self.options["default_decoder"] )
 
     def decode(self, node, cache=None, as_map_key=False):
         """Given a node of data (any supported decodeable obj - string, dict,
@@ -153,15 +168,15 @@ class Decoder(object):
         if node:
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
-                if X_mapkeystr:
+                if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
                     return transit_types.frozendict( {  #pff slower than below..
-                        self_decode(k, cache, 'mapkeystr') : self_decode(v, cache, as_map_key)
+                        self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, as_map_key)
                         for k,v in pairs(node[1:])
                         })
                 returned_dict = {}
                 for k, v in pairs(node[1:]):
-                    key = self_decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
+                    key = self_decode(k, cache, _X_mapkeystr)
                     val = self_decode(v, cache, as_map_key)
                     returned_dict[key] = val
                 return transit_types.frozendict(returned_dict)
@@ -192,24 +207,23 @@ class Decoder(object):
         if is_cacheable(string, as_map_key):
             cache.encache(pstring, True)
         return pstring
-      if X_is_cache_key_as_subscr:
-       def decode_string(self, string, cache, as_map_key):
-        if is_cache_key_as_subscr[ string ]:
-            return cache[ string ]
-        pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
-        if is_cacheable_as_subscr[ (string, as_map_key)]:
-            cache.encache(pstring, True)
-        return pstring
 
     def decode_tag(self, tag, rep):
         decoder = self.decoders.get(tag, None)
         if decoder:
-            return decoder.from_rep(rep)
+            return decoder(rep)
         else:
-            return self.options["default_decoder"].from_rep(tag, rep)
+            return self.options["default_decoder"](tag, rep)
 
     def decode_hash(self, hash, cache, as_map_key):
+        self_decode = self._decode
         if len(hash) != 1:
+            if X_mapcompreh:
+                    # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
+                    return transit_types.frozendict( {  #pff slower than below..
+                        self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, False)
+                        for k,v in hash.items()
+                        })
             h = {}
             for k, v in hash.items():
                 # crude/verbose implementation, but this is only version that
@@ -217,52 +231,127 @@ class Decoder(object):
                 # -- e.g., we have to specify encode/decode order for key/val
                 # -- explicitly, all implicit ordering has broken in corner
                 # -- cases, thus these extraneous seeming assignments
-                key = self._decode(k, cache, 'mapkeystr' if X_mapkeystr else True)
-                val = self._decode(v, cache, False)
+                key = self_decode(k, cache, _X_mapkeystr)
+                val = self_decode(v, cache, False)
                 h[key] = val
             return transit_types.frozendict(h)
         else:
             key = list(hash)[0]
             value = hash[key]
-            key = self._decode(key, cache, True)
+            key = self_decode(key, cache, True)
             if isinstance(key, Tag):
-                return self.decode_tag(key.tag, self._decode(value, cache, as_map_key))
-        return transit_types.frozendict({key: self._decode(value, cache, False)})
+                return self.decode_tag(key.tag, self_decode(value, cache, as_map_key))
+        return transit_types.frozendict({key: self_decode(value, cache, False)})
 
     def parse_string(self, string, cache, as_map_key):
         if string.startswith(ESC):
             m = string[1]
 
             if X_mapkeystr:
-              if m==':' and as_map_key=='mapkeystr' and as_map_key in self.decoders:
-                return self.decoders[ as_map_key ].from_rep(string[2:])
-
+              if m==':' and as_map_key==_X_mapkeystr and as_map_key in self.decoders: #not assumed
+                return self.decoders[ as_map_key ](string[2:])
             if m in self.decoders:
-                return self.decoders[m].from_rep(string[2:])
+                return self.decoders[m](string[2:])
             elif m == ESC or m == SUB or m == RES:
                 return string[1:]
             elif m == "#":
                 return Tag(string[2:])
             else:
-                return self.options["default_decoder"].from_rep(string[1], string[2:])
+                return self.options["default_decoder"](string[1], string[2:])
         return string
+
+    _escaped = SUB+ESC+RES
     if X_parse_string and X_mapkeystr:
-      _escaped = SUB+ESC+RES
       def parse_string(self, string, cache, as_map_key):
         if string and string[0] == ESC:
             m = string[1]
             decoders = self.decoders
-            if m==':' and as_map_key=='mapkeystr' and as_map_key in decoders:
-                return decoders[ as_map_key ].from_rep(string[2:])
+            if m==':' and as_map_key==_X_mapkeystr and as_map_key in decoders: #not assumed
+                return decoders[ as_map_key ](string[2:])
             if m in decoders:
-                return decoders[m].from_rep(string[2:])
+                return decoders[m](string[2:])
             elif m in self._escaped:
                 return string[1:]
             elif m == "#":
                 return Tag(string[2:])
             else:
-                return self.options["default_decoder"].from_rep( m, string[2:])
+                return self.options["default_decoder"]( m, string[2:])
         return string
+    if X_parse_string and not X_mapkeystr:
+      def parse_string(self, string, cache, as_map_key):
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m in decoders:
+                return decoders[m](string[2:])
+            elif m in self._escaped:
+                return string[1:]
+            elif m == "#":
+                return Tag(string[2:])
+            else:
+                return self.options["default_decoder"]( m, string[2:])
+        return string
+    if X_parse_string and not X_mapkeystr and X_tag_in_decoders:
+      def parse_string(self, string, cache, as_map_key):
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m in decoders:
+                return decoders[m](string[2:])
+            elif m in self._escaped:
+                return string[1:]
+            else:
+                return self.options["default_decoder"]( m, string[2:])
+        return string
+    if all([ X_decode_str_with_parse , X_is_cache_key_eq_in_cache ,
+        getattr( RollingCache, 'X_rework', 0) ,
+        not X_mapkeystr , X_tag_in_decoders ,
+        ]):
+       def decode_string(self, string, cache, as_map_key):
+        #if is_cache_key(string):
+        if string in cache:
+            return cache[ string ]
+
+        #pstring = self.parse_string(string.. #java:ReadCache.cacheRead does this inside
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m in decoders:
+                pstring = decoders[m](string[2:])
+            elif m in self._escaped:
+                pstring = string[1:]
+            else:
+                pstring = self.options["default_decoder"]( m, string[2:])
+        else: pstring = string
+
+        if is_cacheable(string, as_map_key):
+            cache.encache(pstring, True)
+        return pstring
+    if all([ X_decode_str_with_parse , X_is_cache_key_eq_in_cache ,
+        getattr( RollingCache, 'X_rework', 0) ,
+        not X_mapkeystr , X_tag_in_decoders ,
+        getattr( RollingCache, 'X_is_cacheable_inside_encache', 0)
+        ]):
+       def decode_string(self, string, cache, as_map_key):
+        #if is_cache_key(string):
+        if string in cache: return cache[ string ]
+
+        #pstring = self.parse_string(string.. #java:ReadCache.cacheRead does this inside
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m in decoders:
+                pstring = decoders[m](string[2:])
+            elif m in self._escaped:
+                pstring = string[1:]
+            else:
+                pstring = self.options["default_decoder"]( m, string[2:])
+        else: pstring = string
+
+        #is_cacheable( string.. is inside
+        cache.encache( pstring, True, as_map_key, string)
+        return pstring
+
 
     def register(self, key_or_tag, obj):
         """Register a custom Transit tag and new parsing function with the
@@ -270,7 +359,9 @@ class Decoder(object):
         this function.  Your new tag and parse/decode function will be added
         to the interal dictionary of decoders for this Decoder object.
         """
+        if X_decoders_direct: obj = getattr( obj, 'from_rep', obj)
         if key_or_tag == "default_decoder":
             self.options["default_decoder"] = obj
         else:
             self.decoders[key_or_tag] = obj
+

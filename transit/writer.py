@@ -29,6 +29,8 @@ X_io_write_sep =1
 # no  self.marshal_dispatch = { s : self.emit_string, ... }
 #TODO self.handlers[x][tag]
 
+X_encode_is_encache =1
+
 import re
 import msgpack
 from transit.constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
@@ -150,8 +152,8 @@ class Marshaler(object):
             if len(handlers[x].tag(x)) != 1:
                 return False
         return True
-      if X_wHandler_tag_len_1:
-         def are_stringable_keys(self, m):
+      if X_wHandler_tag_len_1:      #probably not entirely correct, TaggedMap and TaggedValueHandler will be rejected even with 1-len tags
+        def are_stringable_keys(self, m):
             handlers = self.handlers
             for x in m:
                 if not handlers[x].tag_len_1:
@@ -446,6 +448,16 @@ class JsonMarshaler(Marshaler):
         encoded = cache.encode( prefix + tag + string, as_map_key)      #unneeded str(prefix)
         #self.write_sep()
         return self.io_write_sep('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
+    if X_emit_str_noobject and X_encode_is_encache and getattr( RollingCache, 'X_is_cacheable_inside_encache', 0):
+      def emit_string(self, prefix, tag, string, as_map_key, cache):
+        name = prefix + tag + string            #unneeded str(prefix)
+        if name in cache:
+            encoded = cache[ name]
+        else:
+            cache.encache( name, False, as_map_key)
+            encoded = name
+        return self.io_write_sep('"'+encoded.translate( ESCAPE_DCT_tx)+'"')
+
 
     def push_level(self):
         self.started.append(True)
