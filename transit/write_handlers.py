@@ -16,8 +16,7 @@ X_wHandler =1
 X_wHandler_tag_len_1 =1
 #X_wHandler_tag_as_subscr =0 ??-not-called-enough #a[b] is faster than a.method(b)
 #X_singledispatch =0     #no, much slower
-X_wdict = 1
-X_wHandler_as_dictAttr =0  #slower
+#X_wHandler_as_dictAttr =0  #slower
 X_wHandler_tag_str =1 # see write_handlers
 
 import uuid
@@ -344,13 +343,13 @@ if X_wHandler:
     wdict = {}
     class wHandler:
         __slots__ = 'tag rep string_rep tag_len_1 tag_str'.split()
-        def __init__( me, *types, tag, rep, str):
+        def __init__( me, *types, tag, rep, str, tag_len_1 =False):
             me.tag = tag if callable( tag) else lambda x: tag
             me.rep = rep
             me.string_rep = str
-            me.tag_len_1 = False
+            #tag_len_1: precalc, True or False or None; None meaning do check .tag() dynamically
             if X_wHandler_tag_len_1:
-                me.tag_len_1 = not callable( tag) and len(tag)==1
+                me.tag_len_1 = tag_len_1 or (len(tag)==1 if not callable( tag) else None)
             if X_wHandler_tag_str:
                 me.tag_str = tag if not callable( tag) else None
             for t in types: wdict[ t ] = me
@@ -363,7 +362,7 @@ if X_wHandler:
     NoneHandler         = wHandler( type(None), tag= '_'  , rep= rep_None , str= rep_None)
     #IntHandler          = wHandler( int,        tag= 'i'  , rep= rep_x    , str= str )
     #BigIntHandler       = wHandler( int,        tag= 'n'  , rep= str      , str= str )
-    Python3IntHandler   = wHandler( int,        tag= lambda x: 'i' if MIN_INT < x < MAX_INT else 'n', rep= rep_x, str= str)
+    Python3IntHandler   = wHandler( int,        tag= lambda x: 'i' if MIN_INT < x < MAX_INT else 'n', rep= rep_x, str= str, tag_len_1 =True)
     BigDecimalHandler   = wHandler( Decimal,    tag= 'f'  , rep= str      , str= str)
     float_infp= float("Inf")
     float_infn= float("-Inf")
@@ -383,7 +382,7 @@ if X_wHandler:
     StringHandler       = wHandler( str,            tag= 's'    , rep= rep_x    , str= rep_x )
     BooleanHandler      = wHandler( bool, Boolean,  tag= '?'    , rep= bool     , str= lambda x: "t" if x else "f")
     ArrayHandler        = wHandler( list, tuple,    tag= 'array', rep= rep_x    , str= rep_None)
-    MapHandler          = wHandler( dict, frozendict, tag= 'map'  , rep= rep_x    , str= rep_None)
+    MapHandler          = wHandler( dict, frozendict, tag= 'map', rep= rep_x    , str= rep_None)
     KeywordHandler      = wHandler( Keyword,    tag= ':'    , rep= str      , str= str)
     SymbolHandler       = wHandler( Symbol,     tag= '$'    , rep= str      , str= str)
     UuidHandler         = wHandler( uuid.UUID,  tag= 'u'    , rep= lambda x: struct.unpack(">qq", x.bytes), str= str)
@@ -402,8 +401,8 @@ if X_wHandler:
         TaggedMap: TaggedMap,
         }
     for klas in inherited.values():
-        if not hasattr( klas, 'tag_len_1'): klas.tag_len_1 = False
-        if not hasattr( klas, 'tag_str'):   klas.tag_str = None
+        if X_wHandler_tag_len_1 and not hasattr( klas, 'tag_len_1'): klas.tag_len_1 = None
+        if X_wHandler_tag_str   and not hasattr( klas, 'tag_str'):   klas.tag_str = None
     wdict.update( inherited)
 
 
@@ -417,7 +416,7 @@ class WriteHandler(ClassDict):
     """
 
     def __init__(self):
-      if X_wdict:
+      if X_wHandler:
         super().__init__( wdict)
       else:
         super(WriteHandler, self).__init__()

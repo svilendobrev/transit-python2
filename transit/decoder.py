@@ -112,7 +112,7 @@ class Decoder(object):
             self.make_decode_map()
         if X_decoders_direct:
             def from_repper(x): return getattr( x, 'from_rep', x)
-            self.decoders = dict( (k, from_repper(v)) for k,v in self.decoders.items())
+            self.decoders = { k:from_repper(v) for k,v in self.decoders.items() }
             self.options["default_decoder"] = from_repper( self.options["default_decoder"] )
 
     def decode(self, node, cache=None, as_map_key=False):
