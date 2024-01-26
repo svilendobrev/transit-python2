@@ -8,8 +8,10 @@ CACHE_SIZE = CACHE_CODE_DIGITS * CACHE_CODE_DIGITS
 MIN_SIZE_CACHEABLE = 4
 
 #ReadCache.cacheCode
-#def is_cache_key(name):
-#    return name and (name[0] == SUB and name != MAP_AS_ARR)
+def is_cache_key(name):
+    return name and (name[0] == SUB and name != MAP_AS_ARR)
+def is_cacheable(string, as_map_key=False):
+    return len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:"))
 
 # WriteCache.indexToCode
 def encode_key(i):
