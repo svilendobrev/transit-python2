@@ -161,20 +161,43 @@ class SpecialNumbersHandler(object):
 
 if X_plain:
     DefaultHandler = transit_types.TaggedValue
-    #NoneHandler
+    def NoneHandler(): return None
     KeywordHandler = transit_types.Keyword
     SymbolHandler  = transit_types.Symbol
     BigDecimalHandler = Decimal
-    #BooleanHandler
+    def BooleanHandler(x):
+        return transit_types.true if x == "t" else transit_types.false
     IntHandler = int
     FloatHandler = float
-    #UuidHandler
+    def UuidHandler(u):
+        """Given a string, return a UUID object."""
+        if isinstance(u, str): return uuid.UUID(u)
+        # hack to remove signs
+        a = ctypes.c_ulong(u[0])
+        b = ctypes.c_ulong(u[1])
+        combined = a.value << 64 | b.value
+        return uuid.UUID(int=combined)
     UriHandler = transit_types.URI
-    #DateHandler
+    def DateHandler(d):
+        if isinstance( d, int): ms = d
+        elif "T" in d:
+            return dateutil.parser.parse(d)
+        else: ms = int(d)
+        return datetime.datetime.fromtimestamp( ms / 1000.0, dateutil.tz.tzutc())
     BigIntegerHandler = int
-    #LinkHandler
-    #ListHandler
+    def self(x): return x
+    def LinkHandler(l):
+        return transit_types.Link(**l)
+    ListHandler = self
     SetHandler = frozenset
-    #CmapHandler
-    #IdentityHandler
-    #SpecialNumbersHandler
+    def CmapHandler(cmap):
+        return transit_types.frozendict(pairs(cmap))
+    IdentityHandler = self
+    _SpecialNumbers = {
+        "NaN": float("Nan"),
+        "INF": float("Inf"),
+        "-INF": float("-Inf"),
+        }
+    def SpecialNumbersHandler(z):
+        if z in _SpecialNumbers: return _SpecialNumbers[z]
+        raise ValueError(f"Don't know how to handle: {z} as 'z'")
