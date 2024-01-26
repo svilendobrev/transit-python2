@@ -28,8 +28,8 @@ X_decoders_direct =1    # remove klass.from_rep , direct funcs instead
 X_tag_in_decoders =1    #??
 X_decode_tag = 1
 X_decode_str_with_parse =1  #only done with RollingCache.X_rework, X_tag_in_decoders, no X_mapkeystr
-X_decode_bytes_last = 0
-X_decode_no_bytes = 1
+X_decode_bytes_last = 1
+X_decode_no_bytes = 0   #tests need bytes :/
 
 from collections import OrderedDict
 
