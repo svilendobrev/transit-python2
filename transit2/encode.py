@@ -136,9 +136,13 @@ X_encache_split = 10 and RollingCache.X_encache_split
 X_encode_in_cache = 0 and RollingCache.X_encache_split
 X_encode_instead_of_emit_str = 0 and RollingCache.X_encache_split
 X_encode_instead_of_emit_str__primitives = 0 and RollingCache.X_encache_split
-X_marshal_embeds_emit_string_no_encode =1 and RollingCache.X_encache_split
-X_encoded_embeds_emit_string_no_encode =1 and RollingCache.X_encache_split
+X_marshal_embeds_emit_string_no_encode =0 and RollingCache.X_encache_split
+X_encoded_embeds_emit_string_no_encode =0 and RollingCache.X_encache_split
 X_handler_rep_x =1
+
+#X_emit_xx_args_instead_of_kargs_ignored =0     # lambda obj, rep, as_map_key, cache: ..
+
+
 assert RollingCache.X_is_cacheable_inside_encache
 def emit_string( rep, as_map_key, cache, **ignore):
     if rep in cache: return cache[ rep]
@@ -273,19 +277,35 @@ class Prejson: #( Marshaler):
         tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
 
         if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
-            repper = handler.string_rep if as_map_key else handler.rep
-            rep = obj if repper is rep_x else repper( obj)
             return emit_string(escape(
-                rep
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                ), as_map_key, cache)
+
+        xmarshal_dispatch = self.marshal_dispatch
+        if tag in xmarshal_dispatch:
+            return xmarshal_dispatch[ tag ]( obj=obj,
+                rep= handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                as_map_key=as_map_key, cache=cache,
+                tag=tag,    #for int
+                )
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
+    if X_marshal_str_shortcut and X_handler_rep_x:
+      def marshal(self, obj, as_map_key, cache):
+        handler = self.handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
+
+        if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
+            repper = handler.string_rep if as_map_key else handler.rep
+            return emit_string(escape(
+                obj if repper is rep_x else repper( obj),
                 #handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 ), as_map_key, cache)
 
         xmarshal_dispatch = self.marshal_dispatch
         if tag in xmarshal_dispatch:
             repper = handler.string_rep if as_map_key else handler.rep
-            rep = obj if repper is rep_x else repper( obj)
             return xmarshal_dispatch[ tag ]( obj=obj,
-                rep= rep,
+                rep= obj if repper is rep_x else repper( obj),
                 #rep= handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 as_map_key=as_map_key, cache=cache,
                 tag=tag,    #for int
@@ -336,9 +356,8 @@ class Prejson: #( Marshaler):
 
         if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
             repper = handler.string_rep if as_map_key else handler.rep
-            rep = obj if repper is rep_x else repper( obj)
             rep = escape(
-                rep
+                obj if repper is rep_x else repper( obj),
                 #handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 )
             if rep in cache: return cache[ rep]
@@ -347,9 +366,8 @@ class Prejson: #( Marshaler):
         xmarshal_dispatch = self.marshal_dispatch
         if tag in xmarshal_dispatch:
             repper = handler.string_rep if as_map_key else handler.rep
-            rep = obj if repper is rep_x else repper( obj)
             return xmarshal_dispatch[ tag ]( obj=obj,
-                rep= rep,
+                rep = obj if repper is rep_x else repper( obj),
                 #rep= handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 as_map_key=as_map_key, cache=cache,
                 tag=tag,    #for int

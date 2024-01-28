@@ -23,5 +23,9 @@ TODO = '''
 * + keep for-loop map_factory for pre-3.8 compat
 * try diff. MIN_SIZE_CACHEABLE
 * +0.5% try split cache.encache into encache_k2v and encache_v2k
+* ~0.5% try embed emit_string
+* +     combinations of above
+* +0.5% try check if handler.rep is rep_x
+* +? emit..(args) instead of emit..(kargs,**ignored)
 '''
 
