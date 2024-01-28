@@ -1,3 +1,18 @@
+## svd@2024
+## Copyright 2014 Cognitect. All Rights Reserved.
+##
+## Licensed under the Apache License, Version 2.0 (the "License");
+## you may not use this file except in compliance with the License.
+## You may obtain a copy of the License at
+##
+##      http://www.apache.org/licenses/LICENSE-2.0
+##
+## Unless required by applicable law or agreed to in writing, software
+## distributed under the License is distributed on an "AS-IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+## See the License for the specific language governing permissions and
+## limitations under the License.
+
 #from transit.rolling_cache import RollingCache     #original was broken..
 ## see transit-java-code/impl/ReadCache.java + transit-java-code/impl/WriteCache.java
 # usage in writer.emit_string and Decoder.decode_string
@@ -46,3 +61,28 @@ class RollingCache( dict):    #https://github.com/cognitect/transit-format
             else:
                 self[ name ] = key
 
+    X_encache_split =1
+    if X_encache_split:
+      encache = None
+      def encache_decode_k2v( self, name, as_map_key, name4is_cacheable):  #decode
+        #if is_cacheable
+        if len(name4is_cacheable) >= MIN_SIZE_CACHEABLE and (as_map_key or (name4is_cacheable[0]=='~' and name4is_cacheable[1] in "#$:")) :
+            l = len( self)
+            if l >= CACHE_SIZE:
+                self.clear()
+                l = 0
+            #key = encode_i2key_map[ l ]
+            #self[ key ] = name
+            self[ encode_i2key_map[ l ]] = name
+      def encache_encode_v2k( self, name, as_map_key):     #encode
+        #if is_cacheable
+        if len(name) >= MIN_SIZE_CACHEABLE and (as_map_key or (name[0]=='~' and name[1] in "#$:")) :
+            l = len( self)
+            if l >= CACHE_SIZE:
+                self.clear()
+                l = 0
+            #key = encode_i2key_map[ l ]
+            #self[ name ] = key
+            self[ name ] = encode_i2key_map[ l ]
+
+# vim:ts=4:sw=4:expandtab

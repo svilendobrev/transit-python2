@@ -1,3 +1,4 @@
+## svd@2024
 ## Copyright 2014 Cognitect. All Rights Reserved.
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,74 +16,81 @@
 #+X_FIX_ARRAY = 1
 X_mapkeystr = 0     #treat map-keys separately from just Keyword .. no need if all Keywords are treated-same
 _X_mapkeystr = 'mapkeystr' if X_mapkeystr else True
-#+X_mapcompreh= 1         #as-of timing-probi.. dictcomp is a-bit-faster than {}+loop , listcomp is a-bit-faster than []+loop
+X_mapcompreh= 1         #as-of timing-probi.. dictcomp is a-bit-faster than {}+loop , listcomp is a-bit-faster than []+loop
 #+X_tuple_via_list =1    #unclear gain.. into X_FIX_ARRAY
 X_decode_map =0         #slower
 X_is_cache_key_eq_in_cache =1   #better this.. avoid is_cache_key() at all
 #+X_parse_string = 1
-X_escaped_first= 1
-X_decoders_direct =1    # remove klass.from_rep , direct funcs instead
+#X_plain =1             #rhandler = plain func, not class+method
+#X_decoders_direct =1    # remove klass.from_rep , direct funcs instead
 X_tag_in_decoders =1    #??
+X_escaped_first= 1
 #+X_decode_tag = 1
 X_decode_str_with_parse =1  #only done with RollingCache.X_rework, X_tag_in_decoders, no X_mapkeystr
 #+X_decode_bytes_last = 1
 X_decode_no_bytes = 1
 
-from collections import OrderedDict
 
 from transit import transit_types
-from transit.helpers import pairs
+#from transit.helpers import pairs
+def pairs(i):
+    return zip(*[iter(i)] * 2)
 from transit.transit_types import true, false
-from transit.constants import MAP_AS_ARR, ESC, SUB, RES
-from tt.rolling_cache import RollingCache, is_cacheable, is_cache_key
-import decimal
-#read-handlers
-X_plain = 1
 
-if X_plain:
-    DefaultHandler = transit_types.TaggedValue
-    def NoneHandler(): return None
-    KeywordHandler = transit_types.Keyword
-    SymbolHandler  = transit_types.Symbol
-    BigDecimalHandler = decimal.Decimal
-    def BooleanHandler(x):
-        return true if x == "t" else false
-    IntHandler = int
-    FloatHandler = float
-    def UuidHandler(u):
-        """Given a string, return a UUID object."""
-        if isinstance(u, str): return uuid.UUID(u)
-        # hack to remove signs
-        a = ctypes.c_ulong(u[0])
-        b = ctypes.c_ulong(u[1])
-        combined = a.value << 64 | b.value
-        return uuid.UUID(int=combined)
-    UriHandler = transit_types.URI
-    def DateHandler(d):
-        if isinstance( d, int): ms = d
-        elif "T" in d:
-            return dateutil.parser.parse(d)
-        else: ms = int(d)
-        return datetime.datetime.fromtimestamp( ms / 1000.0, dateutil.tz.tzutc())
-    BigIntegerHandler = int
-    def _self(x): return x
-    def LinkHandler(l): return transit_types.Link(**l)
-    ListHandler = _self
-    SetHandler = frozenset
-    def CmapHandler(cmap): return transit_types.frozendict(pairs(cmap))
-    IdentityHandler = _self
-    _SpecialNumbers = {
-        "NaN": float("Nan"),
-        "INF": float("Inf"),
-        "-INF": float("-Inf"),
-        }
-    def SpecialNumbersHandler(z):
-        if z in _SpecialNumbers: return _SpecialNumbers[z]
-        raise ValueError(f"Don't know how to handle: {z} as 'z'")
+#read-handlers
+from uuid import UUID
+import decimal
+from datetime import datetime, timezone
+fromisoformat = datetime.fromisoformat
+fromtimestamp = datetime.fromtimestamp
+utc = timezone.utc
+
+DefaultHandler = transit_types.TaggedValue
+def NoneHandler(): return None
+KeywordHandler = transit_types.Keyword
+SymbolHandler  = transit_types.Symbol
+BigDecimalHandler = decimal.Decimal
+def BooleanHandler(x):
+    return true if x == "t" else false
+IntHandler = int
+FloatHandler = float
+def UuidHandler(u):
+    """Given a string, return a UUID object."""
+    if isinstance(u, str): return UUID(u)
+    # hack to remove signs
+    a = ctypes.c_ulong(u[0])
+    b = ctypes.c_ulong(u[1])
+    combined = a.value << 64 | b.value
+    return UUID(int=combined)
+UriHandler = transit_types.URI
+def DateHandler(d):
+    if isinstance( d, int): ms = d
+    elif "T" in d:
+        return fromisoformat( d)
+        #return dateutil.parser.parse(d)
+    else: ms = int(d)
+    return fromtimestamp( ms / 1000.0, utc)
+BigIntegerHandler = int
+def _self(x): return x
+def LinkHandler(l): return transit_types.Link(**l)
+ListHandler = _self
+SetHandler = frozenset
+def CmapHandler(cmap): return transit_types.frozendict(pairs(cmap))
+IdentityHandler = _self
+_SpecialNumbers = {
+    "NaN": float("Nan"),
+    "INF": float("Inf"),
+    "-INF": float("-Inf"),
+    }
+def SpecialNumbersHandler(z):
+    if z in _SpecialNumbers: return _SpecialNumbers[z]
+    raise ValueError(f"Don't know how to handle: {z} as 'z'")
 
 # eo read-handlers
 
-assert X_plain and X_decoders_direct
+from collections import OrderedDict
+from transit.constants import MAP_AS_ARR, ESC, SUB, RES
+from tt.rolling_cache import RollingCache, is_cacheable, is_cache_key
 
 class Tag(object):
     def __init__(self, tag):
@@ -120,7 +128,7 @@ ground_decoders = {
 }
 
 if X_tag_in_decoders:
-    assert X_decoders_direct
+    #assert X_decoders_direct
     ground_decoders[ "#" ] = Tag
 
 _escaped = SUB+ESC+RES
@@ -143,10 +151,10 @@ class Decoder(object):
         self.decoders.update(ground_decoders)
         if X_decode_map:
             self.make_decode_map()
-        if X_decoders_direct:
-            def from_repper(x): return getattr( x, 'from_rep', x)   #just in case some ReadHandler class comes
-            self.decoders = { k:from_repper(v) for k,v in self.decoders.items() }
-            self.options["default_decoder"] = from_repper( self.options["default_decoder"] )
+        #if X_decoders_direct:
+        def from_repper(x): return getattr( x, 'from_rep', x)   #just in case some ReadHandler class comes
+        self.decoders = { k:from_repper(v) for k,v in self.decoders.items() }
+        self.options["default_decoder"] = from_repper( self.options["default_decoder"] )
 
     def decode(self, node, cache=None, as_map_key=False):
         """Given a node of data (any supported decodeable obj - string, dict,
@@ -205,7 +213,26 @@ class Decoder(object):
             return self_decode_map[ tp ]( node, cache, as_map_key)
         return node
 
-    def decode_list(self, node, cache, as_map_key):
+      def decode_list(self, node, cache, as_map_key):
+        """Special case decodes map-as-array into map_factory.
+        Otherwise lists are treated into tuples.
+        """
+        self_decode = self._decode
+        if node:
+            if node[0] == MAP_AS_ARR:
+                # key must be decoded before value for caching to work.
+                # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
+                returned_dict = {}
+                for k,v in pairs(node[1:]):
+                    returned_dict[ self_decode( k, cache, _X_mapkeystr) ] = self_decode( v, cache, as_map_key)
+                return self.map_factory(returned_dict)
+            decoded = self_decode(node[0], cache, as_map_key)
+            if isinstance(decoded, Tag):
+                return self.decode_tag(decoded.tag, self_decode(node[1], cache, as_map_key))
+            return (decoded, *[self_decode(x, cache, as_map_key) for x in node[1:]])
+        return ()
+    if X_mapcompreh:    #for python >= 3.8
+      def decode_list(self, node, cache, as_map_key):
         """Special case decodes map-as-array into map_factory.
         Otherwise lists are treated into tuples.
         """
@@ -236,6 +263,12 @@ class Decoder(object):
         pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
         cache.encache( pstring, True, as_map_key, string)
         return pstring
+    if X_is_cache_key_eq_in_cache and RollingCache.X_encache_split:
+      def decode_string(self, string, cache, as_map_key):
+        if string in cache: return cache[ string ]
+        pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
+        cache.encache_decode_k2v( pstring, as_map_key, string)
+        return pstring
 
     def decode_tag(self, tag, rep):
         self_decoders = self.decoders
@@ -246,9 +279,9 @@ class Decoder(object):
     def decode_hash(self, hash, cache, as_map_key):
         self_decode = self._decode
         if len(hash) != 1:
-            #if X_mapcompreh:
+            if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-            return self.map_factory( {
+                return self.map_factory( {
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, False)
                         for k,v in hash.items()
                         })
@@ -383,6 +416,27 @@ class Decoder(object):
         cache.encache( pstring, True, as_map_key, string)
         return pstring
 
+    if all([ X_decode_str_with_parse , X_is_cache_key_eq_in_cache ,
+        not X_mapkeystr , X_tag_in_decoders , X_escaped_first,
+        RollingCache.X_encache_split
+        ]):
+      def decode_string(self, string, cache, as_map_key):
+        if string in cache: return cache[ string ]
+
+        #pstring = self.parse_string(string.. #java:ReadCache.cacheRead does this inside
+        if string and string[0] == ESC:
+            m = string[1]
+            decoders = self.decoders
+            if m in _escaped:
+                pstring = string[1:]
+            elif m in decoders:
+                pstring = decoders[m](string[2:])
+            else:
+                pstring = self.options["default_decoder"]( m, string[2:])
+        else: pstring = string
+
+        cache.encache_decode_k2v( pstring, as_map_key, string)
+        return pstring
 
     def register(self, key_or_tag, obj):
         """Register a custom Transit tag and new parsing function with the
@@ -390,9 +444,11 @@ class Decoder(object):
         this function.  Your new tag and parse/decode function will be added
         to the interal dictionary of decoders for this Decoder object.
         """
-        if X_decoders_direct: obj = getattr( obj, 'from_rep', obj)
+        #if X_decoders_direct:
+        obj = getattr( obj, 'from_rep', obj)
         if key_or_tag == "default_decoder":
             self.options["default_decoder"] = obj
         else:
             self.decoders[key_or_tag] = obj
 
+# vim:ts=4:sw=4:expandtab

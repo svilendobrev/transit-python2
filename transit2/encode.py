@@ -1,4 +1,18 @@
 ## svd@2024
+## Copyright 2014 Cognitect. All Rights Reserved.
+##
+## Licensed under the Apache License, Version 2.0 (the "License");
+## you may not use this file except in compliance with the License.
+## You may obtain a copy of the License at
+##
+##      http://www.apache.org/licenses/LICENSE-2.0
+##
+## Unless required by applicable law or agreed to in writing, software
+## distributed under the License is distributed on an "AS-IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+## See the License for the specific language governing permissions and
+## limitations under the License.
+
 from transit.constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
 
 #from transit.write_handlers import X_wHandler_tag_len_1, X_wHandler_tag_str, WriteHandler
@@ -115,6 +129,7 @@ def flatten_map(m):
     """Expand a dictionary's items into a flat list"""
     return [item for t in m.items() for item in t]
 
+X_str_rep = 10
 assert RollingCache.X_is_cacheable_inside_encache
 def emit_string( rep, as_map_key, cache, **ignore):
     name = rep
@@ -122,6 +137,20 @@ def emit_string( rep, as_map_key, cache, **ignore):
         return cache[ name]
     cache.encache( name, False, as_map_key)
     return name
+if RollingCache.X_encache_split:
+  def emit_string( rep, as_map_key, cache, **ignore):
+    name = rep
+    if name in cache:
+        return cache[ name]
+    cache.encache_encode_v2k( name, as_map_key)
+    return name
+  if X_str_rep:
+   def emit_string( rep, as_map_key, cache, **ignore):
+    if rep in cache:
+        return cache[ rep]
+    cache.encache_encode_v2k( rep, as_map_key)
+    return rep
+
 def emit_string2( rep, as_map_key, cache, **ignore):
     return emit_string( escape(rep), as_map_key, cache)
 
@@ -138,10 +167,10 @@ def emit_double( rep, as_map_key, cache, **ignore):
 
 
 class Prejson: #( Marshaler):
-    X_marshal_map =0
-    X_marshal_map_extend=0 # 1 or 2  # no, r.append x2 is faster than r_append x2 than extend(tuple)
-    X_marshal_arr =0
-    X_marshal_str = 10
+    X_map_embeds_marshal =0
+    #X_marshal_map_extend=0 # 1 or 2  # no, r.append x2 is faster than r_append x2 than extend(tuple)
+    X_arr_embeds_marshal =0
+    X_marshal_str_shortcut = 10
 
     def __init__(self, opts={}):
         self.opts = opts
@@ -172,7 +201,7 @@ class Prejson: #( Marshaler):
         if len(tag) == 1:
             return self.marshal(TaggedValue(QUOTE, obj), False, cache)
         return self.marshal(obj, False, cache)
-
+    encode = marshal_top
     #eo public stuff
 
     def marshal(self, obj, as_map_key, cache):
@@ -188,12 +217,12 @@ class Prejson: #( Marshaler):
                 )
         return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
-    if X_marshal_str:
+    if X_marshal_str_shortcut:
       def marshal(self, obj, as_map_key, cache):
         handler = self.handlers[obj]
         tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
 
-        if tag == "s":  #X_marshal_str and  :most frequent case
+        if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
             return emit_string(escape(
                 handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 ), as_map_key, cache)
@@ -209,9 +238,9 @@ class Prejson: #( Marshaler):
 
     def emit_array(self, rep, as_map_key, cache, **ignore):
         marshal = self.marshal
-        if not self.X_marshal_arr:
-            return [ marshal( x, False, cache) for x in rep ]
-
+        return [ marshal( x, False, cache) for x in rep ]
+    if X_arr_embeds_marshal:
+      def emit_array(self, rep, as_map_key, cache, **ignore):
         r = []
         #append = r.append      #r.append(x) is faster than r_append(x)
         handlers = self.handlers
@@ -235,20 +264,14 @@ class Prejson: #( Marshaler):
     def emit_map(self, obj, as_map_key, cache, **ignore):
         marshal = self.marshal
         r = [ MAP_AS_ARR ]
-        if not self.X_marshal_map:
-          if self.X_marshal_map_extend==1:
-            extend = r.extend
-            for k,v in obj.items():
-                extend(( marshal( k, True, cache), marshal( v, False, cache)))
-          elif self.X_marshal_map_extend==2:
-            for k,v in obj.items():
-                r.extend(( marshal( k, True, cache), marshal( v, False, cache)))
-          else:
-            for k,v in obj.items():
-                r.append( marshal( k, True, cache))
-                r.append( marshal( v, False, cache))
-          return r
-
+        for k,v in obj.items():
+            r.append( marshal( k, True, cache))
+            r.append( marshal( v, False, cache))
+            #XXX r.append x2 is faster than r_append x2 is faster than r.extend(tuple)
+        return r
+    if X_map_embeds_marshal:
+      def emit_map(self, obj, as_map_key, cache, **ignore):
+        r = [ MAP_AS_ARR ]
         #append = r.append      #r.append(x) is faster than r_append(x)
         handlers = self.handlers
         emit_encoded = self.emit_encoded
