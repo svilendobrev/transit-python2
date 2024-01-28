@@ -216,11 +216,11 @@ class frozendict(Mapping, Hashable):
 if X_frozendict:
   from collections.abc import MutableMapping
   class frozendict( dict):
-    def __hash__(self):
+    def __hash__(self):     #this can be memoized
         return hash(frozenset(self.items()))
     def __repr__(self):
         return 'frozendict('+super().__repr__()+')'
-    locals().update( (m,None) for m in dir(MutableMapping) if m not in dir(Mapping))
+    locals().update( (m,None) for m in dir(MutableMapping) if m not in dir(Mapping))    #disable all mutating
 
 
 class Link(object):
