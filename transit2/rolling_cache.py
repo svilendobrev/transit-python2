@@ -22,11 +22,13 @@ CACHE_CODE_DIGITS = 44
 CACHE_SIZE = CACHE_CODE_DIGITS * CACHE_CODE_DIGITS
 MIN_SIZE_CACHEABLE = 4
 
-#ReadCache.cacheCode
+#from transit.constants import SUB, MAP_AS_ARR
+# ReadCache.cacheCode
 def is_cache_key(name):
     return name and (name[0] == SUB and name != MAP_AS_ARR)
-def is_cacheable(string, as_map_key=False):
-    return len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:"))
+# WriteCache.isCacheable
+#def is_cacheable(string, as_map_key=False):
+#    return len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:"))
 
 # WriteCache.indexToCode
 def encode_key(i):
@@ -41,6 +43,7 @@ def encode_key(i):
 #    if sz == 2: return ord(s[1]) - FIRST_ORD
 #    return (ord(s[2]) - FIRST_ORD) + (CACHE_CODE_DIGITS * (ord(s[1]) - FIRST_ORD))
 
+#X_encode_key_map =1
 encode_i2key_map = dict( (i,encode_key(i)) for i in range( CACHE_SIZE))
 
 class RollingCache( dict):    #https://github.com/cognitect/transit-format
@@ -63,7 +66,7 @@ class RollingCache( dict):    #https://github.com/cognitect/transit-format
 
     X_encache_split =1
     if X_encache_split:
-      encache = None
+      #encache = None
       def encache_decode_k2v( self, name, as_map_key, name4is_cacheable):  #decode
         #if is_cacheable
         if len(name4is_cacheable) >= MIN_SIZE_CACHEABLE and (as_map_key or (name4is_cacheable[0]=='~' and name4is_cacheable[1] in "#$:")) :
@@ -74,6 +77,7 @@ class RollingCache( dict):    #https://github.com/cognitect/transit-format
             #key = encode_i2key_map[ l ]
             #self[ key ] = name
             self[ encode_i2key_map[ l ]] = name
+        return name
       def encache_encode_v2k( self, name, as_map_key):     #encode
         #if is_cacheable
         if len(name) >= MIN_SIZE_CACHEABLE and (as_map_key or (name[0]=='~' and name[1] in "#$:")) :
@@ -84,5 +88,18 @@ class RollingCache( dict):    #https://github.com/cognitect/transit-format
             #key = encode_i2key_map[ l ]
             #self[ name ] = key
             self[ name ] = encode_i2key_map[ l ]
+        return name
+      def encode( self, name, as_map_key):     #encode
+        if name in self: return self[ name]
+        #if is_cacheable
+        if len(name) >= MIN_SIZE_CACHEABLE and (as_map_key or (name[0]=='~' and name[1] in "#$:")) :
+            l = len( self)
+            if l >= CACHE_SIZE:
+                self.clear()
+                l = 0
+            #key = encode_i2key_map[ l ]
+            #self[ name ] = key
+            self[ name ] = encode_i2key_map[ l ]
+        return name
 
 # vim:ts=4:sw=4:expandtab

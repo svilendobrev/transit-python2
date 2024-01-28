@@ -17,7 +17,7 @@
 X_mapkeystr = 0     #treat map-keys separately from just Keyword .. no need if all Keywords are treated-same
 _X_mapkeystr = 'mapkeystr' if X_mapkeystr else True
 X_mapcompreh= 1         #as-of timing-probi.. dictcomp is a-bit-faster than {}+loop , listcomp is a-bit-faster than []+loop
-#+X_tuple_via_list =1    #unclear gain.. into X_FIX_ARRAY
+#+X_tuple_via_listcomp =1    #minimal gain.. into X_FIX_ARRAY
 X_decode_map =0         #slower
 X_is_cache_key_eq_in_cache =1   #better this.. avoid is_cache_key() at all
 #+X_parse_string = 1
@@ -26,16 +26,17 @@ X_is_cache_key_eq_in_cache =1   #better this.. avoid is_cache_key() at all
 X_tag_in_decoders =1    #??
 X_escaped_first= 1
 #+X_decode_tag = 1
-X_decode_str_with_parse =1  #only done with RollingCache.X_rework, X_tag_in_decoders, no X_mapkeystr
+X_decode_str_with_parse =1  #only done with X_tag_in_decoders, no X_mapkeystr
 #+X_decode_bytes_last = 1
 X_decode_no_bytes = 1
 
 
-from transit import transit_types
+#from transit import transit_types
 #from transit.helpers import pairs
 def pairs(i):
     return zip(*[iter(i)] * 2)
 from transit.transit_types import true, false
+from transit.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 
 #read-handlers
 from uuid import UUID
@@ -45,10 +46,10 @@ fromisoformat = datetime.fromisoformat
 fromtimestamp = datetime.fromtimestamp
 utc = timezone.utc
 
-DefaultHandler = transit_types.TaggedValue
+DefaultHandler = TaggedValue
 def NoneHandler(): return None
-KeywordHandler = transit_types.Keyword
-SymbolHandler  = transit_types.Symbol
+KeywordHandler = Keyword
+SymbolHandler  = Symbol
 BigDecimalHandler = decimal.Decimal
 def BooleanHandler(x):
     return true if x == "t" else false
@@ -62,7 +63,7 @@ def UuidHandler(u):
     b = ctypes.c_ulong(u[1])
     combined = a.value << 64 | b.value
     return UUID(int=combined)
-UriHandler = transit_types.URI
+UriHandler = URI
 def DateHandler(d):
     if isinstance( d, int): ms = d
     elif "T" in d:
@@ -72,10 +73,10 @@ def DateHandler(d):
     return fromtimestamp( ms / 1000.0, utc)
 BigIntegerHandler = int
 def _self(x): return x
-def LinkHandler(l): return transit_types.Link(**l)
+def LinkHandler(l): return Link(**l)
 ListHandler = _self
 SetHandler = frozenset
-def CmapHandler(cmap): return transit_types.frozendict(pairs(cmap))
+def CmapHandler(cmap): return frozendict(pairs(cmap))
 IdentityHandler = _self
 _SpecialNumbers = {
     "NaN": float("Nan"),
@@ -90,7 +91,7 @@ def SpecialNumbersHandler(z):
 
 from collections import OrderedDict
 from transit.constants import MAP_AS_ARR, ESC, SUB, RES
-from tt.rolling_cache import RollingCache, is_cacheable, is_cache_key
+from tt.rolling_cache import RollingCache, is_cache_key
 
 class Tag(object):
     def __init__(self, tag):
@@ -140,7 +141,7 @@ class Decoder(object):
     Note: Some (ground_decoders) cannot be overriden,
     needed to maintain bottom-tier compatibility.
     """
-    map_factory = transit_types.frozendict
+    map_factory = frozendict
 
     def __init__(self, options={}):
         self.options = default_options.copy()
@@ -229,6 +230,7 @@ class Decoder(object):
             decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
                 return self.decode_tag(decoded.tag, self_decode(node[1], cache, as_map_key))
+            #X_FIX_ARRAY: fallthrough used to repeat parseing node[0] ..broken cache
             return (decoded, *[self_decode(x, cache, as_map_key) for x in node[1:]])
         return ()
     if X_mapcompreh:    #for python >= 3.8
@@ -251,7 +253,7 @@ class Decoder(object):
             return (decoded, *[self_decode(x, cache, as_map_key) for x in node[1:]])
         return ()
 
-    #if RollingCache.X_is_cacheable_inside_encache:
+    assert RollingCache.X_is_cacheable_inside_encache
     def decode_string(self, string, cache, as_map_key):
         if is_cache_key(string): return cache[ string ]
         pstring = self.parse_string(string, None, as_map_key)   #java:ReadCache.cacheRead does this inside
