@@ -131,15 +131,14 @@ def flatten_map(m):
 
 
 
+X_marshal_str_shortcut = 10     #faster than emit_string2+X_emit_string2_embeds
 X_emit_string2_embeds = 0       #does not matter if X_marshal_str_shortcut =1
 X_encache_split = 10 and RollingCache.X_encache_split
 X_encode_in_cache = 0 and RollingCache.X_encache_split
 X_encode_instead_of_emit_str = 0 and RollingCache.X_encache_split
-X_encode_instead_of_emit_str__primitives = 0 and RollingCache.X_encache_split
-X_marshal_embeds_emit_string_no_encode =0 and RollingCache.X_encache_split
-X_encoded_embeds_emit_string_no_encode =0 and RollingCache.X_encache_split
+X_marshal_embeds_emit_string_no_encode =10 and RollingCache.X_encache_split
+X_encoded_embeds_emit_string_no_encode =10 and RollingCache.X_encache_split
 X_handler_rep_x =1
-
 X_emit_xx_args_instead_of_kargs_ignored =1     # lambda tag, obj, rep, as_map_key, cache: ..
 
 assert RollingCache.X_is_cacheable_inside_encache
@@ -165,13 +164,17 @@ if X_encache_split:
         if rep in cache: return cache[ rep]
         cache.encache_encode_v2k( rep, as_map_key)
         return rep
-    # lambda obj, rep, as_map_key, cache: ..
+    def emit_string2( tag, obj, rep, as_map_key, cache):
+        return emit_string(0,0, escape(rep), as_map_key, cache)
 if X_encode_in_cache:
   def emit_string( rep, as_map_key, cache, **ignore):
     return cache.encode( rep, as_map_key)
   if X_emit_string2_embeds:
     def emit_string2( rep, as_map_key, cache, **ignore):
         return cache.encode( escape( rep), as_map_key)
+
+if X_marshal_str_shortcut:
+    emit_string2 = 0
 
 ''' comparing these is tricky.. diffs are minimal:
 1.default (RollingCache.X_is_cacheable_inside_encache)
@@ -212,19 +215,8 @@ def emit_int( tag, obj, rep, as_map_key, cache, **ignore):
 def emit_double( rep, as_map_key, cache, **ignore):
     return emit_string(ESC+ "d"+ rep, True, cache) if as_map_key else rep
 
-if X_encode_instead_of_emit_str__primitives: # these matter if as_map_key.. rarely
-  def emit_nil( as_map_key, cache, **ignore):
-    return cache.encode(ESC+ "_", True) if as_map_key else None
-  def emit_boolean( rep, as_map_key, cache, **ignore):
-    return cache.encode(ESC+ "?"+ rep, True) if as_map_key else rep
-  def emit_int( tag, obj, rep, as_map_key, cache, **ignore):            #this is always called but usualy returns at first line
-    if isinstance(rep, int) and JSON_MIN_INT <= obj <= JSON_MAX_INT:
-        return obj
-    return cache.encode(ESC+ tag+ str(rep), as_map_key)
-  def emit_double( rep, as_map_key, cache, **ignore):
-    return cache.encode(ESC+ "d"+ rep, True) if as_map_key else rep
-
 if X_emit_xx_args_instead_of_kargs_ignored:
+  # emit_string in these matter if as_map_key.. rarely
   def emit_nil( tag, obj, rep, as_map_key, cache):
     return emit_string(0,0, ESC+ "_", True, cache) if as_map_key else None
   def emit_boolean( tag, obj, rep, as_map_key, cache):
@@ -238,7 +230,6 @@ if X_emit_xx_args_instead_of_kargs_ignored:
 
 
 class Prejson: #( Marshaler):
-    X_marshal_str_shortcut = 10     #faster than emit_string2+X_emit_string2_embeds
     #X_map_with_extend=0            # no, r.append x2 is faster than r_append x2 than extend(tuple)
     X_map_embeds_marshal =0
     X_arr_embeds_marshal =0
@@ -287,6 +278,33 @@ class Prejson: #( Marshaler):
                 tag=tag,    #for int
                 )
         return self.emit_encoded(tag, handler, obj, as_map_key, cache)
+    if X_emit_xx_args_instead_of_kargs_ignored:
+      def marshal(self, obj, as_map_key, cache):
+        handler = self.handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
+
+        xmarshal_dispatch = self.marshal_dispatch
+        if tag in xmarshal_dispatch:
+            return xmarshal_dispatch[ tag ](
+                tag, obj,
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                as_map_key, cache,
+                )
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
+    if X_emit_xx_args_instead_of_kargs_ignored and X_handler_rep_x:
+      def marshal(self, obj, as_map_key, cache):
+        handler = self.handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
+
+        xmarshal_dispatch = self.marshal_dispatch
+        if tag in xmarshal_dispatch:
+            repper = handler.string_rep if as_map_key else handler.rep
+            return xmarshal_dispatch[ tag ](
+                tag, obj,
+                obj if repper is rep_x else repper( obj),
+                as_map_key, cache,
+                )
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
     if X_marshal_str_shortcut:
       def marshal(self, obj, as_map_key, cache):
@@ -304,6 +322,24 @@ class Prejson: #( Marshaler):
                 rep= handler.string_rep(obj) if as_map_key else handler.rep(obj),
                 as_map_key=as_map_key, cache=cache,
                 tag=tag,    #for int
+                )
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
+    if X_marshal_str_shortcut and X_emit_xx_args_instead_of_kargs_ignored:
+      def marshal(self, obj, as_map_key, cache):
+        handler = self.handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
+
+        if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
+            return emit_string(0,0, escape(
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                ), as_map_key, cache)
+
+        xmarshal_dispatch = self.marshal_dispatch
+        if tag in xmarshal_dispatch:
+            return xmarshal_dispatch[ tag ](
+                tag, obj,
+                handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                as_map_key, cache,
                 )
         return self.emit_encoded(tag, handler, obj, as_map_key, cache)
     if X_marshal_str_shortcut and X_handler_rep_x:
@@ -411,6 +447,29 @@ class Prejson: #( Marshaler):
                 tag=tag,    #for int
                 )
         return self.emit_encoded(tag, handler, obj, as_map_key, cache)
+    if X_marshal_str_shortcut and X_marshal_embeds_emit_string_no_encode and X_handler_rep_x and X_emit_xx_args_instead_of_kargs_ignored:
+      def marshal(self, obj, as_map_key, cache):
+        handler = self.handlers[obj]
+        tag = handler.tag_str or handler.tag(obj)       #+gain X_wHandler_tag_str
+
+        if tag == "s":  #X_marshal_str_shortcut and  :most frequent case
+            repper = handler.string_rep if as_map_key else handler.rep
+            rep = escape(
+                obj if repper is rep_x else repper( obj),
+                #handler.string_rep(obj) if as_map_key else handler.rep(obj),
+                )
+            if rep in cache: return cache[ rep]
+            return cache.encache_encode_v2k( rep, as_map_key)
+
+        xmarshal_dispatch = self.marshal_dispatch
+        if tag in xmarshal_dispatch:
+            repper = handler.string_rep if as_map_key else handler.rep
+            return xmarshal_dispatch[ tag ](
+                tag, obj,
+                obj if repper is rep_x else repper( obj),
+                as_map_key, cache,
+                )
+        return self.emit_encoded(tag, handler, obj, as_map_key, cache)
 
     def emit_array(self, rep, as_map_key, cache, **ignore):
         marshal = self.marshal
@@ -514,21 +573,24 @@ class Prejson: #( Marshaler):
             return self.emit_tagged(tag, rep, cache)
         assert not as_map_key, f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
         return self.emit_tagged(tag, rep, cache)
-    def emit_encoded(self, tag, handler, obj, as_map_key, cache):
-        rep = handler.rep(obj)
-        if len(tag) == 1:
-            if isinstance(rep, str):
-                return emit_string(ESC+ tag+ rep, as_map_key, cache)
-            elif as_map_key or self.opts.get("prefer_strings"):
-                rep = handler.string_rep(obj)
-                assert isinstance(rep, str), f"Cannot be encoded as string: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
-                return emit_string(ESC+ tag+ rep, as_map_key, cache)
-            return self.emit_tagged(tag, rep, cache)
-        assert not as_map_key, f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
-        return self.emit_tagged(tag, rep, cache)
     if X_emit_xx_args_instead_of_kargs_ignored:
       def emit_encoded(self, tag, handler, obj, as_map_key, cache):
         rep = handler.rep(obj)
+        if len(tag) == 1:
+            if isinstance(rep, str):
+                return emit_string(0,0, ESC+ tag+ rep, as_map_key, cache)
+            elif as_map_key or self.opts.get("prefer_strings"):
+                rep = handler.string_rep(obj)
+                assert isinstance(rep, str), f"Cannot be encoded as string: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
+                return emit_string(0,0, ESC+ tag+ rep, as_map_key, cache)
+            return self.emit_tagged(tag, 0, rep, 0, cache)
+        assert not as_map_key, f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
+        return self.emit_tagged(tag, 0, rep, 0, cache)
+    if X_emit_xx_args_instead_of_kargs_ignored and X_handler_rep_x:
+      def emit_encoded(self, tag, handler, obj, as_map_key, cache):
+        #rep = handler.rep(obj)
+        repper = handler.rep
+        rep = obj if repper is rep_x else repper( obj)
         if len(tag) == 1:
             if isinstance(rep, str):
                 return emit_string(0,0, ESC+ tag+ rep, as_map_key, cache)
