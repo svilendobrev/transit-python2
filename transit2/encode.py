@@ -131,18 +131,19 @@ def flatten_map(m):
 
 
 
-X_marshal_str_shortcut = 10     #faster than emit_string2+X_emit_string2_embeds
-X_emit_string2_embeds = 0       #does not matter if X_marshal_str_shortcut =1
-X_encache_split = 10 and RollingCache.X_encache_split
+X_marshal_str_shortcut = 10     #small gain
+X_emit_string2_embeds = 10      #does not matter if X_marshal_str_shortcut =1
+X_encache_split = 1 and RollingCache.X_encache_split
 #X_encode_in_cache = 0 and RollingCache.X_encache_split ..slower
 #X_encode_instead_of_emit_str = 0 and RollingCache.X_encache_split  ..slower
-X_marshal_embeds_emit_string_no_encode =10 and RollingCache.X_encache_split
+#very small gain:
+X_marshal_embeds_emit_string_no_encode =10 and X_marshal_str_shortcut and RollingCache.X_encache_split
 X_encoded_embeds_emit_string_no_encode =10 and RollingCache.X_encache_split
 X_handler_rep_x =1
-X_emit_xx_args_instead_of_kargs_ignored =1     # lambda rep, as_map_key, cache, obj, tag: ..
+X_handler_rep_x__in_encoded= 1      #not slower, but unclear gain
 
 assert RollingCache.X_is_cacheable_inside_encache
-assert X_emit_xx_args_instead_of_kargs_ignored
+
 def emit_string( rep, as_map_key, cache, _obj, _tag):
     if rep in cache: return cache[ rep]
     cache.encache( rep, False, as_map_key)
@@ -184,7 +185,7 @@ in unhappy path - not in cache
     1 - global,call, dict-check, local+getattr+call , if-switch, doit
 
 sooo: embedding 2 might be best:
-5 X_marshal_str_shortcut + X_marshal_embeds_emit_string2_emit_string (escape():always)
+5 X_marshal_str_shortcut + X_marshal_embeds_emit_string_no_encode
 - check if (escaped) name in cache, else call cache.encache_encode_v2k
   happy: dict-check, ret
   unhappy: dict-check, local+getattr+call, doit
@@ -204,7 +205,7 @@ def emit_double( rep, as_map_key, cache, _obj, _tag):
     return emit_string( ESC+ "d"+ rep, True, cache, 0,0) if as_map_key else rep
 
 
-class Prejson: #( Marshaler):
+class Prejson: #like Marshaler..
     #X_map_with_extend=0            # no, r.append x2 is faster than r_append x2 than extend(tuple)
     #X_map_embeds_marshal =0
     #X_arr_embeds_marshal =0
@@ -380,7 +381,7 @@ class Prejson: #( Marshaler):
         else:
             assert not as_map_key, f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
         return self.emit_tagged( rep, 0, cache, 0, tag)
-    if X_handler_rep_x:
+    if X_handler_rep_x__in_encoded:
       def emit_encoded(self, tag, handler, obj, as_map_key, cache):
         repper = handler.rep
         rep = obj if repper is rep_x else repper( obj)
@@ -413,7 +414,7 @@ class Prejson: #( Marshaler):
         else:
             assert not as_map_key, f"Cannot be used as a map key: {str({'tag': tag, 'rep': rep, 'obj': obj})}"
         return self.emit_tagged( rep, 0, cache, 0, tag)
-    if X_encoded_embeds_emit_string_no_encode and X_handler_rep_x:
+    if X_encoded_embeds_emit_string_no_encode and X_handler_rep_x__in_encoded:
       def emit_encoded(self, tag, handler, obj, as_map_key, cache):
         repper = handler.rep
         rep = obj if repper is rep_x else repper( obj)
