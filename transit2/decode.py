@@ -31,12 +31,11 @@ X_decode_str_with_parse =1  #only done with X_tag_in_decoders, no X_mapkeystr
 X_decode_no_bytes = 1
 
 
-#from transit import transit_types
 #from transit.helpers import pairs
 def pairs(i):
     return zip(*[iter(i)] * 2)
-from transit.transit_types import true, false
-from transit.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
+from tt.transit_types import true, false
+from tt.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 
 #read-handlers
 from uuid import UUID
@@ -90,7 +89,7 @@ def SpecialNumbersHandler(z):
 # eo read-handlers
 
 from collections import OrderedDict
-from transit.constants import MAP_AS_ARR, ESC, SUB, RES
+from tt.constants import MAP_AS_ARR, ESC, SUB, RES
 from tt.rolling_cache import RollingCache, is_cache_key
 
 class Tag(object):

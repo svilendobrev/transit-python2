@@ -21,13 +21,14 @@ FIRST_ORD = 48
 CACHE_CODE_DIGITS = 44
 CACHE_SIZE = CACHE_CODE_DIGITS * CACHE_CODE_DIGITS
 MIN_SIZE_CACHEABLE = 4
+#XXX if above MIN_SIZE_CACHEABLE does not match the other side... TROUBLE
 
-#from transit.constants import SUB, MAP_AS_ARR
+from tt.constants import SUB, MAP_AS_ARR
 # ReadCache.cacheCode
-def is_cache_key(name):
+def is_cache_key(name):     #the func maybe never used
     return name and (name[0] == SUB and name != MAP_AS_ARR)
 # WriteCache.isCacheable
-#def is_cacheable(string, as_map_key=False):
+#def is_cacheable(string, as_map_key=False):    #embedded inside RollingCache.encache*
 #    return len(string) >= MIN_SIZE_CACHEABLE and (as_map_key or (string[0]=='~' and string[1] in "#$:"))
 
 # WriteCache.indexToCode

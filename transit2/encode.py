@@ -13,12 +13,10 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-from transit.constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
-
-#from transit.write_handlers import X_wHandler_tag_len_1, X_wHandler_tag_str, WriteHandler
+from tt.constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
+from tt.class_hash import ClassDict
+from tt.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 import uuid, datetime, struct, decimal
-from transit.class_hash import ClassDict
-from transit.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 from math import isnan
 MAX_INT = pow(2, 63) - 1
 MIN_INT = -pow(2, 63)
