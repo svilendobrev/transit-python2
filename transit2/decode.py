@@ -34,8 +34,8 @@ X_decode_no_bytes = 1
 #from transit.helpers import pairs
 def pairs(i):
     return zip(*[iter(i)] * 2)
-from tt.transit_types import true, false
-from tt.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
+from .transit_types import true, false
+from .transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 
 #read-handlers
 from uuid import UUID
@@ -89,8 +89,8 @@ def SpecialNumbersHandler(z):
 # eo read-handlers
 
 from collections import OrderedDict
-from tt.constants import MAP_AS_ARR, ESC, SUB, RES
-from tt.rolling_cache import RollingCache, is_cache_key
+from .constants import MAP_AS_ARR, ESC, SUB, RES
+from .rolling_cache import RollingCache, is_cache_key
 
 class Tag(object):
     def __init__(self, tag):

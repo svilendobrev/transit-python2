@@ -23,7 +23,7 @@ CACHE_SIZE = CACHE_CODE_DIGITS * CACHE_CODE_DIGITS
 MIN_SIZE_CACHEABLE = 4
 #XXX if above MIN_SIZE_CACHEABLE does not match the other side... TROUBLE
 
-from tt.constants import SUB, MAP_AS_ARR
+from .constants import SUB, MAP_AS_ARR
 # ReadCache.cacheCode
 def is_cache_key(name):     #the func maybe never used
     return name and (name[0] == SUB and name != MAP_AS_ARR)

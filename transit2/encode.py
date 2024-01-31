@@ -13,9 +13,8 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
-from tt.constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
-from tt.class_hash import ClassDict
-from tt.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
+from .class_hash import ClassDict
+from .transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
 import uuid, datetime, struct, decimal
 from math import isnan
 MAX_INT = pow(2, 63) - 1
@@ -107,13 +106,14 @@ for klas in klasi.values():
     if not hasattr( klas, 'tag_str'):   klas.tag_str = None
 wh_all.update( klasi)
 
-def WriteHandler():
+def WriteHandlers():
     'dispatcher for encoding/writing Python data into Transit data, based on its type, and inheritance'
     return ClassDict( wh_all)
 
 ########### eo write_handlers
 
-from tt.rolling_cache import RollingCache
+from .constants import SUB, ESC, RES, MAP_AS_ARR, QUOTE
+from .rolling_cache import RollingCache
 
 JSON_MAX_INT = pow(2, 53) - 1
 JSON_MIN_INT = -pow(2, 53) + 1
@@ -203,14 +203,14 @@ def emit_double( rep, as_map_key, cache, _obj, _tag):
     return emit_string( ESC+ "d"+ rep, True, cache, 0,0) if as_map_key else rep
 
 
-class Prejson: #like Marshaler..
+class Encoder:
     #X_map_with_extend=0            # no, r.append x2 is faster than r_append x2 than extend(tuple)
     #X_map_embeds_marshal =0
     #X_arr_embeds_marshal =0
 
     def __init__(self, opts={}):
         self.opts = opts
-        self.handlers = WriteHandler()
+        self.handlers = WriteHandlers()
         self.marshal_dispatch = {
             "_": emit_nil,
             "?": emit_boolean,
