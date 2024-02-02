@@ -1,6 +1,6 @@
 ## svd@2024
 '''
-Fixed (caching) and faster heir of transit-python2
+Fixed (caching) and faster variant of transit-python2
 - decoder is py-to-py, so only python-optimized - about 2x faster
 - encoder is now py-to-py too (was py-to-json-direct), removed json-ing, can use any json-encoder lib - about 2x faster
 - btw assumption: if something looks-like cache-key, it will be in the cache
