@@ -16,7 +16,7 @@ X_FIX_ARRAY = 1
 X_mapkeystr = 0     #treat map-keys separately from just Keyword .. no need if all Keywords are treated-same
 _X_mapkeystr = 'mapkeystr' if X_mapkeystr else True
 X_mapcompreh= 1         #as-of timing-probi.. dictcomp is a-bit-faster than {}+loop , listcomp is a-bit-faster than []+loop
-#X_tuple_via_list =1    #unclear gain.. into X_FIX_ARRAY
+#X_tuple_via_listcomp =1    #unclear gain.. into X_FIX_ARRAY
 X_decode_map =0         #slower
 #X_decode_as_subscr =0  #cannot, 3 args  #a[b] is faster than a.method(b)
 #X_decode_self_cache =0 ?? less args= less noise but same speed probably or slower
@@ -200,18 +200,18 @@ class Decoder(object):
         if node:
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
-                #if X_mapcompreh:
+                if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                return self.map_factory( {
+                    return self.map_factory( {
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, as_map_key)
                         for k,v in pairs(node[1:])
                         })
-                #returned_dict = {}
-                #for k, v in pairs(node[1:]):
-                #    key = self_decode(k, cache, _X_mapkeystr)
-                #    val = self_decode(v, cache, as_map_key)
-                #    returned_dict[key] = val
-                #return self.map_factory(returned_dict)
+                returned_dict = {}
+                for k, v in pairs(node[1:]):
+                    key = self_decode(k, cache, _X_mapkeystr)
+                    val = self_decode(v, cache, as_map_key)
+                    returned_dict[key] = val
+                return self.map_factory(returned_dict)
 
             decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
@@ -278,23 +278,23 @@ class Decoder(object):
     def decode_hash(self, hash, cache, as_map_key):
         self_decode = self._decode
         if len(hash) != 1:
-            #if X_mapcompreh:
+            if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-            return self.map_factory( {
+                return self.map_factory( {
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, False)
                         for k,v in hash.items()
                         })
-            #h = {}
-            #for k, v in hash.items():
-            #    # crude/verbose implementation, but this is only version that
-            #    # plays nice w/cache for both msgpack and json thus far.
-            #    # -- e.g., we have to specify encode/decode order for key/val
-            #    # -- explicitly, all implicit ordering has broken in corner
-            #    # -- cases, thus these extraneous seeming assignments
-            #    key = self_decode(k, cache, _X_mapkeystr)
-            #    val = self_decode(v, cache, False)
-            #    h[key] = val
-            #return self.map_factory(h)
+            h = {}
+            for k, v in hash.items():
+                # crude/verbose implementation, but this is only version that
+                # plays nice w/cache for both msgpack and json thus far.
+                # -- e.g., we have to specify encode/decode order for key/val
+                # -- explicitly, all implicit ordering has broken in corner
+                # -- cases, thus these extraneous seeming assignments
+                key = self_decode(k, cache, _X_mapkeystr)
+                val = self_decode(v, cache, False)
+                h[key] = val
+            return self.map_factory(h)
         else:
             key = list(hash)[0]
             value = hash[key]
