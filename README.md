@@ -4,13 +4,16 @@ transit-python2+
 *Fork of [transit-python2](git@github.com:svilendobrev/transit-python2), fixed + optimized.
  
  * fixed rolling-cache error on when to reset.. and then lots of other things 
- * optimizations.. maybe 2x faster.. up to some point these reside in the transit/ and can be turned on/off over original 
- * in transit2/ rewrote Writer into Encoder without json-ing , and cut all irrelevant/old stuff. Plus new optimizations to on/off
+ * optimizations.. maybe 2x faster.. up to some point these reside in the transit/ with original, can be turned on/off
+ * in transit2/ rewrote Writer into Encoder without json-ing (+2x), cleaned up, added more optimizations to on/off. See __init__.py 
  * beware, interoperability depends on hardcoded rolling_cache constants like MIN_SIZE_CACHEABLE hence highly fragile
  * have fun
  * svd'2024
 
 Follows the original text:
+
+transit-python2
+==============
 
 *Forked from [transit-python](https://github.com/cognitect/transit-python). Python 3.6 to 3.10 are supported*
 
