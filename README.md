@@ -5,8 +5,9 @@ transit-python2+
  
  * fixed rolling-cache error on when to reset.. and then lots of other things 
  * optimizations.. maybe 2x faster.. up to some point these reside in the transit/ with original, can be turned on/off
- * in transit2/ rewrote Writer into Encoder without json-ing (+2x), cleaned up, added more optimizations to on/off. See __init__.py 
- * beware, interoperability depends on hardcoded rolling_cache constants like MIN_SIZE_CACHEABLE hence highly fragile
+ * in transit2/ rewrote Writer into Encoder without json-ing (+2x), cleaned up, added more optimizations to on/off. See `__init__.py`
+ * setup.py etc packaging is not changed - so the transit2/ is only accessible via cloning the repo
+ * btw beware, transit's interoperability depends on hardcoded rolling_cache constants like MIN_SIZE_CACHEABLE hence highly fragile
  * have fun
  * svd'2024
 
