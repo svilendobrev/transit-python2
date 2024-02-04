@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+## svd@2024
 ## Copyright 2014 Cognitect. All Rights Reserved.
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,12 +24,11 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="transit-python3",
-    version="0.8.321",
-    description="Transit marshalling for Python",
+    version="0.9.0",
+    description="Transit encode/decode for Python",
     long_description=long_description,
     long_description_content_type='text/markdown',
     author="Cognitect, 3wnbr1, svilendobrev",
     url="https://github.com/svilendobrev/transit-python3",
     packages=["transit"],
-    #install_requires=["python-dateutil", "msgpack-python"],
 )
