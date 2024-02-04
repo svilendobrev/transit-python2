@@ -24,7 +24,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="transit-python3",
-    version="0.9.0",
+    version="0.8.321-optz",
     description="Transit encode/decode for Python",
     long_description=long_description,
     long_description_content_type='text/markdown',
