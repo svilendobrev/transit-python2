@@ -22,13 +22,13 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
 setup(
-    name="transit-python2",
+    name="transit-python3",
     version="0.8.321",
     description="Transit marshalling for Python",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    author="Cognitect, 3wnbr1",
-    url="https://github.com/3wnbr1/transit-python2",
+    author="Cognitect, 3wnbr1, svilendobrev",
+    url="https://github.com/svilendobrev/transit-python3",
     packages=["transit"],
-    install_requires=["python-dateutil", "msgpack-python"],
+    #install_requires=["python-dateutil", "msgpack-python"],
 )
