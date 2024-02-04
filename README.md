@@ -6,7 +6,7 @@ transit-python3
  * fixed rolling-cache error on when to reset.. and then lots of other things 
  * no json-ing Writer anymore, use a json library for that (+2x speed-up) ; cleaned up ; various optimizations (~2x). Some of last ones still can be on/off. See `transit/__init__.py`
  * older optimizations up to some point reside in the transit1/ with the original under it, can be turned on/off
- * setup.py etc packaging is not changed - so the transit2/ is only accessible via cloning the repo
+ * setup.py etc packaging is not changed - so transit1/ like tests/ is only accessible via cloning the repo
  * btw beware, transit's interoperability depends on hardcoded rolling_cache constants like MIN_SIZE_CACHEABLE hence highly fragile
  * have fun
  * svd'2024
