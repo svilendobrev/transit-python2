@@ -1,11 +1,11 @@
-transit-python2+
+transit-python3 
 ==============
 
 *Fork of [transit-python2](git@github.com:svilendobrev/transit-python2), fixed + optimized.
- 
+ * uses Encoder() and Decoder(), so not 100% compatible anymore
  * fixed rolling-cache error on when to reset.. and then lots of other things 
- * optimizations.. maybe 2x faster.. up to some point these reside in the transit/ with original, can be turned on/off
- * in transit2/ rewrote Writer into Encoder without json-ing (+2x), cleaned up, added more optimizations to on/off. See `transit2/__init__.py`
+ * no json-ing Writer anymore, use a json library for that (+2x speed-up) ; cleaned up ; various optimizations (~2x). Some of last ones still can be on/off. See `transit/__init__.py`
+ * older optimizations up to some point reside in the transit1/ with the original under it, can be turned on/off
  * setup.py etc packaging is not changed - so the transit2/ is only accessible via cloning the repo
  * btw beware, transit's interoperability depends on hardcoded rolling_cache constants like MIN_SIZE_CACHEABLE hence highly fragile
  * have fun

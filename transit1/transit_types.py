@@ -1,4 +1,3 @@
-## svd@2024
 ## Copyright 2014 Cognitect. All Rights Reserved.
 ##
 ## Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,26 +22,120 @@ X_prove_parse_unused =0
 from functools import reduce
 from collections.abc import Mapping, Hashable
 
-class Named( str):
-    __hash__ = str.__hash__
-    def __ne__(self, other): return not self == other
+
+class Named(object):
+
+    def _parse(self):
+        if X_prove_parse_unused: assert 0
+        p = self.str.split("/", 1)
+        if len(p) == 1:
+            self._name = self.str
+            self._namespace = None
+        else:
+            self._namespace = p[0] or None
+            self._name = p[1] or "/"
+        return self._name, self._namespace
+
+    @property
+    def name(self):
+        return self._name if hasattr(self, "_name") else self._parse()[0]
+
+    @property
+    def namespace(self):
+        return self._namespace if hasattr(self, "_namespace") else self._parse()[1]
+
+
+class Keyword(Named):
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.str = value
+        self.hv = value.__hash__()
+
+    def __hash__(self):
+        return self.hv
+
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and super().__eq__( other)
-    @property
-    def str( self): return str(self)
-    #XXX WTF is __call__ ?
-    #these used only in tests
-    @property
-    def name( me):          # as of above _parse: a/b -> b ; a/ -> / ; /b -> b ; / -> / ; a -> a ; '' -> ''
-        if X_prove_parse_unused: assert 0
-        return str(me) if '/' not in me else (me.split('/')[-1] or '/')
-    @property
-    def namespace( me):     # as of above _parse: a/b -> a ; a/ -> a ; /b -> None ; / -> None ; a -> None ; '' -> None
-        if X_prove_parse_unused: assert 0
-        return None if '/' not in me else (me.split('/')[0] or None)
-class Symbol( Named): pass
-class Keyword( Named):
-    def __repr__(self): return f"<Keyword {self}>"
+        return isinstance(other, Keyword) and self.str == other.str
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __call__(self, mp):
+        return mp[self]
+
+    def __repr__(self):
+        return f"<Keyword {self.str} >"
+
+    def __str__(self):
+        return self.str
+
+
+class Symbol(Named):
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.str = value
+        self.hv = value.__hash__()
+
+    def __hash__(self):
+        return self.hv
+
+    def __eq__(self, other):
+        return isinstance(other, Symbol) and self.str == other.str
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __call__(self, mp):
+        return mp[self]
+
+    def __repr__(self):
+        return self.str
+
+    def __str__(self):
+        return self.str
+
+
+if X_keysym:
+    class Named( str):
+        __hash__ = str.__hash__
+        def __ne__(self, other): return not self == other
+        def __eq__(self, other):
+            return isinstance(other, self.__class__) and super().__eq__( other)
+        @property
+        def str( self): return str(self)
+        #XXX WTF is __call__ ?
+        #these used only in tests
+        @property
+        def name( me):          # as of above _parse: a/b -> b ; a/ -> / ; /b -> b ; / -> / ; a -> a ; '' -> ''
+            if X_prove_parse_unused: assert 0
+            return str(me) if '/' not in me else (me.split('/')[-1] or '/')
+        @property
+        def namespace( me):     # as of above _parse: a/b -> a ; a/ -> a ; /b -> None ; / -> None ; a -> None ; '' -> None
+            if X_prove_parse_unused: assert 0
+            return None if '/' not in me else (me.split('/')[0] or None)
+    class Symbol( Named): pass
+    class Keyword( Named):
+        def __repr__(self): return f"<Keyword {self}>"
+
+
+kw_cache = {}
+
+
+class _KWS(object):
+    def __getattr__(self, item):
+        value = self(item)
+        setattr(self, item, value)
+        return value
+
+    def __call__(self, str):
+        if str in kw_cache:
+            return kw_cache[str]
+        else:
+            kw_cache[str] = Keyword(str)
+            return kw_cache[str]
+
+
+kws = _KWS()
 
 
 class TaggedValue(object):
@@ -63,9 +156,11 @@ class TaggedValue(object):
             return reduce(lambda a, b: hash(a) ^ hash(b), self.rep, 0)
         return hash(self.rep)
 
+    def __str__(self):
+        return repr(self)
+
     def __repr__(self):
         return self.tag + " " + repr(self.rep)
-    __str__ = __repr__
 
 
 class Set(TaggedValue):
@@ -96,10 +191,31 @@ class List(TaggedValue):
 class URI(TaggedValue):
     def __init__(self, rep):
         # works p3 TaggedValue.__init__(self, "uri", (unicode(rep)))
-        TaggedValue.__init__(self, "uri", rep)
+        TaggedValue.__init__(self, "uri", (rep))
 
-from collections.abc import MutableMapping
-class frozendict( dict):
+
+class frozendict(Mapping, Hashable):
+    def __init__(self, *args, **kwargs):
+        self._dict = dict(*args, **kwargs)
+
+    def __len__(self):
+        return len(self._dict)
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def __getitem__(self, key):
+        return self._dict[key]
+
+    def __hash__(self):
+        return hash(frozenset(self._dict.items()))
+
+    def __repr__(self):
+        return "frozendict(%r)" % (self._dict,)
+
+if X_frozendict:
+  from collections.abc import MutableMapping
+  class frozendict( dict):
     def __hash__(self):     #this can be memoized
         return hash(frozenset(self.items()))
     def __repr__(self):
@@ -107,7 +223,7 @@ class frozendict( dict):
     locals().update( (m,None) for m in dir(MutableMapping) if m not in dir(Mapping))    #disable all mutating
 
 
-class Link(object):     #TODO this should be .. a dataclass?
+class Link(object):
     # Class property constants for rendering types
     LINK = "link"
     IMAGE = "image"
@@ -188,7 +304,9 @@ class Boolean(object):
 
     def __repr__(self):
         return self.name
-    __str__ = __repr__
+
+    def __str__(self):
+        return self.name
 
 
 # lowercase rep matches java/clojure
