@@ -30,15 +30,23 @@ X_decode_str_with_parse =1  #only done with X_tag_in_decoders, no X_mapkeystr
 #+X_decode_bytes_last = 1
 X_decode_no_bytes = 1
 
+Y_no_Boolean =1
 
 #from transit.helpers import pairs
 def pairs(i):
     return zip(*[iter(i)] * 2)
-from .transit_types import true, false
-from .transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link, Boolean
+
+if Y_no_Boolean:
+    true = True
+    false = False
+else:
+  from .transit_types import true, false
+from .transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link #, Boolean
+
 
 #read-handlers
 from uuid import UUID
+from ctypes import c_ulong as ctypes_c_ulong
 import decimal
 from datetime import datetime, timezone
 fromisoformat = datetime.fromisoformat
@@ -52,14 +60,17 @@ SymbolHandler  = Symbol
 BigDecimalHandler = decimal.Decimal
 def BooleanHandler(x):
     return true if x == "t" else false
+if Y_no_Boolean:
+    def BooleanHandler(x):
+        return x == "t"
 IntHandler = int
 FloatHandler = float
 def UuidHandler(u):
     """Given a string, return a UUID object."""
     if isinstance(u, str): return UUID(u)
     # hack to remove signs
-    a = ctypes.c_ulong(u[0])
-    b = ctypes.c_ulong(u[1])
+    a = ctypes_c_ulong(u[0])
+    b = ctypes_c_ulong(u[1])
     combined = a.value << 64 | b.value
     return UUID(int=combined)
 UriHandler = URI
@@ -196,6 +207,20 @@ class Decoder(object):
         #elif tp is bytes:
         #    return self.decode_string(node.decode("utf-8"), cache, as_map_key)
         return node
+    if X_decode_no_bytes and Y_no_Boolean:
+      def _decode(self, node, cache, as_map_key, *nodes):
+        tp = node.__class__
+        if tp is str:
+            return self.decode_string(node, cache, as_map_key)
+        elif tp is dict or tp is OrderedDict:
+            return self.decode_hash(node, cache, as_map_key)
+        elif tp is list:
+            return self.decode_list(node, cache, as_map_key)
+        #elif tp is bool:
+        #    return true if node else false
+        #elif tp is bytes:
+        #    return self.decode_string(node.decode("utf-8"), cache, as_map_key)
+        return node
     if X_decode_map:
       def make_decode_map( self):
         self._decode_map = {
@@ -206,6 +231,9 @@ class Decoder(object):
             list: self.decode_list,
             bool: lambda node, *a,**ka: true if node else false,
             }
+        if Y_no_Boolean:
+            del self._decode_map[ bool ]
+
       def _decode(self, node, cache, as_map_key):
         tp = node.__class__
         self_decode_map = self._decode_map
