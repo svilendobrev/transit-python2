@@ -358,12 +358,12 @@ class Encoder:
     def emit_cmap(self, rep, _as_map_key, cache, _obj, _tag):
         return {
             emit_string( ESC+ "#cmap", True, cache, 0,0) :
-            self.marshal(flatten_map(m), False, cache)      #cannot call directly self.emit_array.. handler[list] may be other
+            self.marshal( flatten_map(rep), False, cache)      #cannot call directly self.emit_array.. handler[list] may be other
             }
     def emit_tagged(self, rep, _as_map_key, cache, _obj, tag):
         return [
             emit_string( ESC+ "#"+ tag, False, cache, 0,0),
-            self.marshal(rep, False, cache),
+            self.marshal( rep, False, cache),
             ]
 
     def emit_encoded(self, tag, handler, obj, as_map_key, cache):

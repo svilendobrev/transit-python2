@@ -14,79 +14,50 @@
 
 # This test suite verifies that issues corrected remain corrected.
 
-import json
 import unittest
 from decimal import Decimal
-from io import BytesIO, StringIO
 
-from transit.reader import Reader
-from transit.writer import Writer
-from transit.class_hash import ClassDict
-from transit.transit_types import Symbol, frozendict, true, false, Keyword, Named
+from transit3.decode import Decoder
+from transit3 import decode
+from transit3.encode import Encoder
+from transit3.class_hash import ClassDict
+from transit3.transit_types import Symbol, frozendict, true, false, Keyword, Named
 
+if decode.Y_no_Boolean:
+    TRUE, FALSE = True, False
+else:
+    TRUE, FALSE = true, false
 
-class RegressionBaseTest(unittest.TestCase):
-    pass
+class RegressionTest(unittest.TestCase):
+    cases = [
+        ("cache_consistency", ({"Problem?": TRUE}, Symbol("Here"), Symbol("Here"))),
+        ("one_pair_frozendict", frozendict({"a": 1})),
+        ("json_int_max", (pow(2, 53) + 100, pow(2, 63) + 100)),
+        ("newline_in_string", "a\nb"),
+        ("big_decimal", Decimal("190234710272.2394720347203642836434")),
+        ("dict_in_set", frozenset(frozendict({"test": "case"}))),
+        ]
+    def test_roundtrip(self):
+        for name,value in self.cases:
+            with self.subTest( name):
+                in_data = value
+                io = Encoder().encode( in_data)
+                out_data = Decoder().decode( io)
+                self.assertEqual(in_data, out_data)
 
-
-def regression(name, value):
-    class RegressionTest(RegressionBaseTest):
-        def test_roundtrip(self):
-            in_data = value
-            io = StringIO()
-            w = Writer(io, "json")
-            w.write(in_data)
-            r = Reader("json")
-            out_data = r.read(StringIO(io.getvalue()))
-            self.assertEqual(in_data, out_data)
-
-    globals()["test_" + name + "_json"] = RegressionTest
-
-
-regression("cache_consistency", ({"Problem?": true}, Symbol("Here"), Symbol("Here")))
-regression("one_pair_frozendict", frozendict({"a": 1}))
-regression("json_int_max", (pow(2, 53) + 100, pow(2, 63) + 100))
-regression("newline_in_string", "a\nb")
-regression("big_decimal", Decimal("190234710272.2394720347203642836434"))
-regression("dict_in_set", frozenset(frozendict({"test": "case"})))
-
-
-def json_verbose_cache_bug():
-    class JsonVerboseCacheBug(RegressionBaseTest):
-        """Can't rely on roundtrip behavior to test this bug, have to
-        actually verify that both keys are written for json_verbose
-        behavior to be correct."""
-
-        def test_key_not_cached(self):
-            io = StringIO()
-            w = Writer(io, "json_verbose")
-            w.write([{"myKey1": 42}, {"myKey1": 42}])
-            self.assertEqual(io.getvalue(), '[{"myKey1":42},{"myKey1":42}]')
-
-    globals()["test_json_verbose_cache_bug"] = JsonVerboseCacheBug
-
-
-json_verbose_cache_bug()
-
-
-def json_int_boundary(value, expected_type):
-    class JsonIntBoundaryTest(unittest.TestCase):
-        def test_max_is_number(self):
-            for protocol in ("json", "json_verbose"):
-                io = StringIO()
-                w = Writer(io, protocol)
-                w.write([value])
-                actual_type = type(json.loads(io.getvalue())[0])
+class JsonIntBoundaryTest( unittest.TestCase):
+    cases = [
+        (pow(2, 53) - 1, int),
+        (pow(2, 53), str),
+        (-pow(2, 53) + 1, int),
+        (-pow(2, 53), str),
+        ]
+    def test_max_is_number(self):
+        for value,expected_type in self.cases:
+            with self.subTest( str(value)):
+                io = Encoder().encode( [value])
+                actual_type = type(io[0])
                 self.assertEqual(expected_type, actual_type)
-
-    globals()["test_json_int_boundary_" + str(value)] = JsonIntBoundaryTest
-
-
-json_int_boundary(pow(2, 53) - 1, int)
-json_int_boundary(pow(2, 53), str)
-json_int_boundary(-pow(2, 53) + 1, int)
-json_int_boundary(-pow(2, 53), str)
-
 
 class BooleanTest(unittest.TestCase):
     """Even though we're roundtripping transit_types.true and
@@ -96,80 +67,72 @@ class BooleanTest(unittest.TestCase):
     Boolean values.
     """
 
+    #XXX see  decode.Y_no_Boolean = 0
+
     def test_write_bool(self):
-        for protocol in ("json", "json_verbose", "msgpack"):
-            io = BytesIO() if protocol == "msgpack" else StringIO()
-            w = Writer(io, protocol)
-            w.write((True, False))
-            r = Reader(protocol)
-            io.seek(0)
-            out_data = r.read(io)
-            assert out_data[0] == true
-            assert out_data[1] == false
+        io = Encoder().encode((True, False))
+        out_data = Decoder().decode( io)
+        self.assertIs( out_data[0],TRUE)
+        self.assertIs( out_data[1],FALSE)
 
     def test_basic_eval(self):
-        assert true
-        assert not false
+        self.assertTrue( true)
+        self.assertTrue( not false)
 
     def test_or(self):
-        assert true or false
-        assert not (false or false)
-        assert true or true
+        self.assertTrue( true or false)
+        self.assertTrue( not (false or false))
+        self.assertTrue( true or true)
+        self.assertTrue( false or true)
 
     def test_and(self):
-        assert not (true and false)
-        assert true and true
-        assert not (false and false)
+        self.assertTrue( not (true and false))
+        self.assertTrue( not (false and true))
+        self.assertTrue( true and true)
+        self.assertTrue( not (false and false))
 
 
 # Helper classes for inheritance unit test.
 class parent(object):
     pass
-
-
 class child(parent):
     pass
-
-
 class grandchild(child):
     pass
-
 
 class ClassDictInheritanceTest(unittest.TestCase):
     """Fix from issue #18: class_hash should iterate over all ancestors
     in proper mro, not just over direct ancestor.
     """
-
     def test_inheritance(self):
         cd = ClassDict()
         cd[parent] = "test"
-        assert grandchild in cd
+        self.assertTrue( grandchild in cd)
 
-
+#XXX this will be slow, .name/.namespace kept only for compatibility
 class NamedTests(unittest.TestCase):
     """Verify behavior for newly introduced built-in Named name/namespace
     parsing. Accomplished through transit_types.Named, a mixin for
     transit_types.Keyword and transit_types.Symbol.
     """
-
     def test_named(self):
         k = Keyword("blah")
         s = Symbol("blah")
-        assert k.name == "blah"
-        assert s.name == "blah"
+        self.assertEqual( k.name, "blah")
+        self.assertEqual( s.name, "blah")
 
     def test_namespaced(self):
         k = Keyword("ns/name")
         s = Symbol("ns/name")
-        assert k.name == "name"
-        assert s.name == "name"
-        assert k.namespace == "ns"
-        assert s.namespace == "ns"
+        self.assertEqual( k.name, "name")
+        self.assertEqual( s.name, "name")
+        self.assertEqual( k.namespace, "ns")
+        self.assertEqual( s.namespace, "ns")
 
     def test_slash(self):
         k = Keyword("/")
         s = Symbol("/")
-        assert k.name == "/"
-        assert s.name == "/"
-        assert k.namespace is None
-        assert s.namespace is None
+        self.assertEqual( k.name, "/")
+        self.assertEqual( s.name, "/")
+        self.assertIs( k.namespace, None)
+        self.assertIs( s.namespace, None)

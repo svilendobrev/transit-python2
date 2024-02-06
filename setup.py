@@ -30,5 +30,5 @@ setup(
     long_description_content_type='text/markdown',
     author="Cognitect, 3wnbr1, svilendobrev",
     url="https://github.com/svilendobrev/transit-python3",
-    packages=["transit"],
+    packages=["transit3"],
 )

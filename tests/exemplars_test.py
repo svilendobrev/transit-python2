@@ -13,21 +13,21 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 
+#XXX this may need decode.Y_no_Boolean =0
 
+import json
 import unittest
 import dateutil.tz
 from uuid import UUID
 from math import isnan
 from datetime import datetime
-from io import StringIO, BytesIO
 
 # then import transit stuff
-from transit.reader import Reader
-from transit.writer import Writer
-from transit.helpers import mapcat
-from transit.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, true, false
+from transit3.decode import Decoder
+from transit3.encode import Encoder
+from transit3.transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, true, false
 
-from .helpers import ints_centered_on, hash_of_size, array_of_symbools
+from .helpers import ints_centered_on, hash_of_size, mapcat, array_of_symbols
 
 
 PATH = "transit-format/examples/0.8/simple/"
@@ -41,51 +41,13 @@ def exemplar(name, val):
     class ExemplarTest(ExemplarBaseTest):
         def test_json(self):
             with open(PATH + name + ".json") as stream:
-                data = Reader(protocol="json").read(stream)
+                data = Decoder().decode( json.load( stream))
                 self.assertEqual(val, data)
-
-        def test_msgpack(self):
-            with open(PATH + name + ".mp", "rb") as stream:
-                data = Reader(protocol="msgpack").read(stream)
-                self.assertEqual(val, data)
-
-        def test_json_verbose(self):
-            with open(PATH + name + ".verbose.json") as stream:
-                data = Reader(protocol="json_verbose").read(stream)
-                self.assertEqual(val, data)
-
-        def test_reencode_msgpack(self):
-            io = BytesIO()
-            writer = Writer(io, protocol="msgpack")
-            writer.write(val)
-            s = io.getvalue()
-            io = BytesIO(s)
-
-            reader = Reader(protocol="msgpack")
-            newval = reader.read(io)
-            self.assertEqual(val, newval)
 
         def test_reencode_json(self):
-            io = StringIO()
-            writer = Writer(io, protocol="json")
-            writer.write(val)
-            s = io.getvalue()
-            # Uncomment when debugging to see what payloads fail
+            s = Encoder().encode( val)
             # print(s)
-            io = StringIO(s)
-            reader = Reader(protocol="json")
-            newval = reader.read(io)
-            self.assertEqual(val, newval)
-
-        # test json verbose
-        def test_reencode_json_verbose(self):
-            io = StringIO()
-            writer = Writer(io, protocol="json_verbose")
-            writer.write(val)
-            s = io.getvalue()
-            io = StringIO(s)
-            reader = Reader(protocol="json_verbose")
-            newval = reader.read(io)
+            newval = Decoder().decode(s)
             self.assertEqual(val, newval)
 
         def assertEqual(self, val, data):
@@ -201,9 +163,9 @@ exemplar("map_vector_keys", frozendict([[(1, 1), "one"], [(2, 2), "two"]]))
 exemplar("map_unrecognized_vals", {Keyword("key"): "~Unrecognized"})
 # exemplar("map_unrecognized_keys", )
 exemplar("vector_unrecognized_vals", ("~Unrecognized",))
-exemplar("vector_1935_keywords_repeated_twice", tuple(array_of_symbools(1935, 1935 * 2)))
-exemplar("vector_1936_keywords_repeated_twice", tuple(array_of_symbools(1936, 1936 * 2)))
-exemplar("vector_1937_keywords_repeated_twice", tuple(array_of_symbools(1937, 1937 * 2)))
+exemplar("vector_1935_keywords_repeated_twice", tuple(array_of_symbols(1935, 1935 * 2)))
+exemplar("vector_1936_keywords_repeated_twice", tuple(array_of_symbols(1936, 1936 * 2)))
+exemplar("vector_1937_keywords_repeated_twice", tuple(array_of_symbols(1937, 1937 * 2)))
 
 exemplar("map_10_items", hash_of_size(10))
 exemplar(
