@@ -30,7 +30,7 @@ class TaggedMap:
     def string_rep(self): return self._str
 
 class DateTimeHandler:
-    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
     @staticmethod
     def tag(_): return "m"
     @staticmethod
