@@ -43,6 +43,7 @@ else:
   from .transit_types import true, false
 from .transit_types import Keyword, Symbol, URI, frozendict, TaggedValue, Link #, Boolean
 
+MAP_FACTORY = frozendict    #override if needed; None produces plain dicts
 
 #read-handlers
 from uuid import UUID
@@ -86,7 +87,7 @@ def _self(x): return x
 def LinkHandler(l): return Link(**l)
 ListHandler = _self
 SetHandler = frozenset
-def CmapHandler(cmap): return frozendict(pairs(cmap))
+def CmapHandler(cmap): return (MAP_FACTORY or dict)(pairs(cmap))
 IdentityHandler = _self
 _SpecialNumbers = {
     "NaN": float("Nan"),
@@ -151,7 +152,6 @@ class Decoder(object):
     Note: Some (ground_decoders) cannot be overriden,
     needed to maintain bottom-tier compatibility.
     """
-    map_factory = frozendict
 
     def __init__(self, options={}):
         self.options = default_options.copy()
@@ -253,7 +253,8 @@ class Decoder(object):
                 returned_dict = {}
                 for k,v in pairs(node[1:]):
                     returned_dict[ self_decode( k, cache, _X_mapkeystr) ] = self_decode( v, cache, as_map_key)
-                return self.map_factory(returned_dict)
+                if MAP_FACTORY: returned_dict = MAP_FACTORY( returned_dict)
+                return returned_dict
             decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
                 return self.decode_tag(decoded.tag, self_decode(node[1], cache, as_map_key))
@@ -270,10 +271,12 @@ class Decoder(object):
             if node[0] == MAP_AS_ARR:
                 # key must be decoded before value for caching to work.
                 # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                return self.map_factory( {
+                r = {
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, as_map_key)
                         for k,v in pairs(node[1:])
-                        })
+                        }
+                if MAP_FACTORY: r = MAP_FACTORY( r)
+                return r
             decoded = self_decode(node[0], cache, as_map_key)
             if isinstance(decoded, Tag):
                 return self.decode_tag(decoded.tag, self_decode(node[1], cache, as_map_key))
@@ -310,10 +313,12 @@ class Decoder(object):
         if len(hash) != 1:
             if X_mapcompreh:
                     # ... doc/python3/html/reference/expressions.html#dictionary-displays - Starting with 3.8, the key is evaluated before the value
-                return self.map_factory( {
+                r = {
                         self_decode(k, cache, _X_mapkeystr) : self_decode(v, cache, False)
                         for k,v in hash.items()
-                        })
+                        }
+                if MAP_FACTORY: r = MAP_FACTORY( r)
+                return r
             #h = {}
             #for k, v in hash.items():
             #    # crude/verbose implementation, but this is only version that
@@ -331,7 +336,9 @@ class Decoder(object):
             key = self_decode(key, cache, True)
             if isinstance(key, Tag):
                 return self.decode_tag(key.tag, self_decode(value, cache, as_map_key))
-        return self.map_factory({key: self_decode(value, cache, False)})
+        r = { key: self_decode(value, cache, False) }
+        if MAP_FACTORY: r = MAP_FACTORY( r)
+        return r
 
     if X_mapkeystr:
       def parse_string(self, string, cache, as_map_key):
